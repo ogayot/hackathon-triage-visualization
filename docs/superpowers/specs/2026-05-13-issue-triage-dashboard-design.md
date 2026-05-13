@@ -18,8 +18,7 @@ A unified web dashboard + API service that aggregates issues from multiple bug t
 
 | Component | Purpose | Technology |
 |-----------|---------|------------|
-| **Ingestion Workers** | Poll trackers, normalize issues, emit jobs | Async workers (Celery/ARQ/Bull) |
-| **Normalized Store** | Canonical issue storage + embeddings | PostgreSQL + pgvector + Redis |
+| **Ingestion Workers** | Poll trackers, normalize issues, emit jobs | Async workers (Celery/ARQ/Bull) with normalize schema |
 | **Classification & Correlation Engine** | LLM enrichment + similarity clustering | Python service + OpenAI/Anthropic/local LLM |
 | **API Service** | RESTful API for dashboard and external tools | FastAPI (Python) |
 | **Web Dashboard** | React SPA for triage, clusters, trends | React + Vite + Tailwind |
