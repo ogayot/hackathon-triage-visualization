@@ -33,6 +33,18 @@ class Bug(models.Model):
         return f"{self.external_id}: {self.title}"
 
 
+class Preset(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    sources = models.ManyToManyField(BugSource, related_name='presets')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        ordering = ['name']
+
+
 class GitHubPR(models.Model):
     pr_number = models.IntegerField()
     repo = models.CharField(max_length=200)

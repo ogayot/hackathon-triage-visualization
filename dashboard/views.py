@@ -8,9 +8,9 @@ from django.core.management import call_command
 from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 
-from .models import Bug, BugSource
-from .presets import PRESETS
+from .models import Bug, BugSource, Preset
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
 
@@ -56,19 +56,12 @@ def run_command_thread(command, args=None):
 
 
 def get_preset_data(preset_name):
-    preset = PRESETS.get(preset_name)
-    if not preset:
+    try:
+        preset = Preset.objects.get(name=preset_name)
+    except Preset.DoesNotExist:
         return [], []
 
-    sources = []
-    for source_type, identifier in preset["sources"]:
-        source, _ = BugSource.objects.get_or_create(
-            source_type=source_type,
-            identifier=identifier,
-            defaults={"name": identifier.split("/")[-1]},
-        )
-        sources.append(source)
-
+    sources = list(preset.sources.all())
     bugs = Bug.objects.filter(sources__in=sources).distinct()
     return bugs, sources
 
@@ -83,7 +76,7 @@ def dashboard(request):
         status_counts[s] = status_counts.get(s, 0) + 1
 
     context = {
-        "presets": PRESETS,
+        "presets": {p.name: p for p in Preset.objects.all()},
         "current_preset": preset_name,
         "bugs": bugs,
         "sources": sources,
@@ -126,17 +119,17 @@ def bug_detail(request, external_id):
 
 def presets_data(request):
     data = {}
-    for preset_name, preset in PRESETS.items():
-        bugs, sources = get_preset_data(preset_name)
-        data[preset_name] = {
+    for preset in Preset.objects.all():
+        bugs, sources = get_preset_data(preset.name)
+        data[preset.name] = {
             "source_count": len(sources),
             "bug_count": bugs.count(),
             "status_counts": {},
         }
         for bug in bugs:
             s = bug.status
-            data[preset_name]["status_counts"][s] = (
-                data[preset_name]["status_counts"].get(s, 0) + 1
+            data[preset.name]["status_counts"][s] = (
+                data[preset.name]["status_counts"].get(s, 0) + 1
             )
     return JsonResponse(data)
 
@@ -173,3 +166,95 @@ def run_operation(request, operation_name):
 def operation_status(request):
     status = read_status()
     return JsonResponse(status)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE"])
+def manage_presets(request, preset_id=None):
+    if request.method == "GET":
+        if preset_id:
+            try:
+                preset = Preset.objects.get(id=preset_id)
+                return JsonResponse({
+                    "id": preset.id,
+                    "name": preset.name,
+                    "sources": [
+                        {
+                            "id": s.id,
+                            "source_type": s.source_type,
+                            "identifier": s.identifier,
+                            "name": s.name,
+                        }
+                        for s in preset.sources.all()
+                    ],
+                })
+            except Preset.DoesNotExist:
+                return JsonResponse({"error": "Preset not found"}, status=404)
+
+        presets_list = []
+        for p in Preset.objects.all():
+            presets_list.append({
+                "id": p.id,
+                "name": p.name,
+                "source_count": p.sources.count(),
+            })
+        return JsonResponse(presets_list, safe=False)
+
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        name = body.get("name", "").strip()
+        if not name:
+            return JsonResponse({"error": "Name is required"}, status=400)
+
+        sources_data = body.get("sources", [])
+        if not sources_data:
+            return JsonResponse({"error": "At least one source is required"}, status=400)
+
+        if preset_id:
+            try:
+                preset = Preset.objects.get(id=preset_id)
+            except Preset.DoesNotExist:
+                return JsonResponse({"error": "Preset not found"}, status=404)
+            if Preset.objects.filter(name=name).exclude(id=preset_id).exists():
+                return JsonResponse({"error": "A preset with this name already exists"}, status=409)
+            preset.name = name
+            preset.save()
+        else:
+            if Preset.objects.filter(name=name).exists():
+                return JsonResponse({"error": "A preset with this name already exists"}, status=409)
+            preset = Preset.objects.create(name=name)
+
+        source_ids = []
+        for s in sources_data:
+            source_type = s.get("source_type", "").strip()
+            identifier = s.get("identifier", "").strip()
+            if not source_type or not identifier:
+                continue
+            source, _ = BugSource.objects.get_or_create(
+                source_type=source_type,
+                identifier=identifier,
+                defaults={"name": identifier.split("/")[-1]},
+            )
+            source_ids.append(source.id)
+
+        preset.sources.set(BugSource.objects.filter(id__in=source_ids))
+
+        return JsonResponse({
+            "id": preset.id,
+            "name": preset.name,
+            "source_count": preset.sources.count(),
+        }, status=201 if not preset_id else 200)
+
+    if request.method == "DELETE":
+        if not preset_id:
+            return JsonResponse({"error": "Preset ID required"}, status=400)
+        try:
+            preset = Preset.objects.get(id=preset_id)
+            preset.delete()
+            return JsonResponse({"status": "deleted"})
+        except Preset.DoesNotExist:
+            return JsonResponse({"error": "Preset not found"}, status=404)
