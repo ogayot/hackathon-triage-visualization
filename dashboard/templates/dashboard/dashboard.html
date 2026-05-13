@@ -420,7 +420,7 @@ function openBugDetail(externalId) {
             body.innerHTML = `
                 <div class="mb-3">
                     <span class="badge bg-secondary" style="background-color: var(--status-dot-confirmed); color: white;">${escapeHtml(data.status)}</span>
-                    ${data.priority ? '<span class="badge bg-warning ms-1" style="background-color: var(--status-dot-confirmed); color: white;">' + escapeHtml(data.priority) + '</span>' : ''}
+                    ${data.priority ? '<span class="badge bg-warning ms-1">' + escapeHtml(data.priority) + '</span>' : ''}
                     <span class="text-muted ms-2">Updated: ${new Date(data.last_updated).toLocaleString()}</span>
                 </div>
                 <p>${data.description ? escapeHtml(data.description) : 'No description.'}</p>
