@@ -72,6 +72,7 @@ class BugCorrelation(models.Model):
     bugs = models.ManyToManyField(Bug, related_name="correlations")
     confidence_score = models.FloatField(
         default=0.0,
+        db_index=True,
         validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
     )
     match_reason = models.TextField(blank=True)

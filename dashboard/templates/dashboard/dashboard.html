@@ -363,6 +363,12 @@
 let editingPresetId = null;
 let sourceRowCounter = 0;
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 function openBugDetail(externalId) {
     const modal = document.getElementById('bugModal');
     const body = document.getElementById('modalBody');
@@ -373,26 +379,30 @@ function openBugDetail(externalId) {
     fetch('/bugs/' + externalId + '/')
         .then(r => r.json())
         .then(data => {
-            title.textContent = '#' + data.id + ': ' + data.title;
+            title.textContent = '#' + escapeHtml(data.id) + ': ' + escapeHtml(data.title);
             body.innerHTML = `
                 <div class="mb-3">
-                    <span class="badge bg-secondary">${data.status}</span>
-                    ${data.priority ? '<span class="badge bg-warning ms-1">' + data.priority + '</span>' : ''}
+                    <span class="badge bg-secondary">${escapeHtml(data.status)}</span>
+                    ${data.priority ? '<span class="badge bg-warning ms-1">' + escapeHtml(data.priority) + '</span>' : ''}
                     <span class="text-muted ms-2">Updated: ${new Date(data.last_updated).toLocaleString()}</span>
                 </div>
-                <p>${data.description || 'No description.'}</p>
+                <p>${data.description ? escapeHtml(data.description) : 'No description.'}</p>
                 <h6>Sources</h6>
                 <ul class="list-unstyled">
                     ${data.sources.map(s => {
                         let icon = '📦';
                         if (s.source_type === 'github') icon = '🐙';
                         if (s.source_type === 'bugzilla') icon = '🐧';
-                        return '<li>' + icon + ' ' + s.name + ' (' + s.source_type + ': ' + s.identifier + ')</li>';
+                        return '<li>' + icon + ' ' + escapeHtml(s.name) + ' (' + escapeHtml(s.source_type) + ': ' + escapeHtml(s.identifier) + ')</li>';
                     }).join('')}
                 </ul>
-                ${data.url ? '<a href="' + data.url + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2">View on Launchpad ↗</a>' : ''}
-                ${data.github_prs && data.github_prs.length > 0 ? '<h6 class="mt-3">Related GitHub PRs</h6><ul class="list-unstyled">' + data.github_prs.map(pr => '<li>🐙 <a href="' + pr.url + '" target="_blank">' + pr.repo + '#' + pr.pr_number + '</a>: ' + pr.title + ' <span class="badge bg-' + (pr.state === 'merged' ? 'success' : 'primary') + '">' + pr.state + '</span></li>').join('') + '</ul>' : ''}
-                ${data.correlations && data.correlations.length > 0 ? '<h6 class="mt-3">Correlated Bugs</h6><ul class="list-unstyled">' + data.correlations.map(c => '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + c.reason + ')</span><ul>' + c.bugs.map(b => '<li><a href="/bugs/' + b.external_id + '/" onclick="openBugDetail(\'' + b.external_id + '\');return false;">' + b.external_id + '</a>: ' + b.title + '</li>').join('') + '</ul></li>').join('') + '</ul>' : ''}
+                ${data.url ? '<a href="' + escapeHtml(data.url) + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2">View on Launchpad ↗</a>' : ''}
+                ${data.github_prs && data.github_prs.length > 0 ? '<h6 class="mt-3">Related GitHub PRs</h6><ul class="list-unstyled">' + data.github_prs.map(pr => '<li>🐙 <a href="' + escapeHtml(pr.url) + '" target="_blank">' + escapeHtml(pr.repo) + '#' + pr.pr_number + '</a>: ' + escapeHtml(pr.title) + ' <span class="badge bg-' + (pr.state === 'merged' ? 'success' : 'primary') + '">' + escapeHtml(pr.state) + '</span></li>').join('') + '</ul>' : ''}
+                ${data.correlations && data.correlations.length > 0 ? '<h6 class="mt-3">Correlated Bugs</h6><ul class="list-unstyled">' + data.correlations.map(c => {
+                    const otherBugs = c.bugs.filter(b => b.external_id !== data.id);
+                    if (otherBugs.length === 0) return '';
+                    return '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + escapeHtml(c.reason) + ')</span><ul>' + otherBugs.map(b => '<li><a href="/bugs/' + encodeURIComponent(b.external_id) + '/" onclick="openBugDetail(\'' + escapeHtml(b.external_id).replace(/'/g, "\\'") + '\');return false;">' + escapeHtml(b.external_id) + '</a>: ' + escapeHtml(b.title) + '</li>').join('') + '</ul></li>';
+                }).join('') + '</ul>' : ''}
             `;
         })
         .catch(() => {

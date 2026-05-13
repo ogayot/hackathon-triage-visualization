@@ -290,7 +290,7 @@ def correlations_json(request):
 def correlated_bugs(request, external_id):
     bug = get_object_or_404(Bug, external_id=external_id)
     related = []
-    for corr in bug.correlations.prefetch_related("bugs"):
+    for corr in bug.correlations.prefetch_related("bugs__sources"):
         for b in corr.bugs.all():
             if b.external_id != bug.external_id:
                 related.append({
