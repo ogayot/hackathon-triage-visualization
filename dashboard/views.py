@@ -10,7 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .models import Bug, BugSource, Preset
+from .models import Bug, BugSource, Preset, BugCorrelation
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
 
@@ -66,6 +66,14 @@ def get_preset_data(preset_name):
     return bugs, sources
 
 
+def presets_data(request):
+    presets = [
+        {"id": p.id, "name": p.name, "source_count": p.sources.count()}
+        for p in Preset.objects.all()
+    ]
+    return JsonResponse(presets, safe=False)
+
+
 def dashboard(request):
     preset_name = request.GET.get("preset", "Subiquity")
     bugs, sources = get_preset_data(preset_name)
@@ -114,24 +122,19 @@ def bug_detail(request, external_id):
             }
             for pr in bug.github_prs.all()
         ],
+        "correlations": [
+            {
+                "id": corr.id,
+                "score": corr.confidence_score,
+                "reason": corr.match_reason,
+                "bugs": [
+                    {"external_id": b.external_id, "title": b.title}
+                    for b in corr.bugs.all()
+                ],
+            }
+            for corr in bug.correlations.all()
+        ],
     })
-
-
-def presets_data(request):
-    data = {}
-    for preset in Preset.objects.all():
-        bugs, sources = get_preset_data(preset.name)
-        data[preset.name] = {
-            "source_count": len(sources),
-            "bug_count": bugs.count(),
-            "status_counts": {},
-        }
-        for bug in bugs:
-            s = bug.status
-            data[preset.name]["status_counts"][s] = (
-                data[preset.name]["status_counts"].get(s, 0) + 1
-            )
-    return JsonResponse(data)
 
 
 @csrf_exempt
@@ -258,3 +261,48 @@ def manage_presets(request, preset_id=None):
             return JsonResponse({"status": "deleted"})
         except Preset.DoesNotExist:
             return JsonResponse({"error": "Preset not found"}, status=404)
+
+def correlations_json(request):
+    data = []
+    for corr in BugCorrelation.objects.prefetch_related("bugs__sources"):
+        data.append({
+            "id": corr.id,
+            "score": corr.confidence_score,
+            "reason": corr.match_reason,
+            "created_at": corr.created_at.isoformat(),
+            "bugs": [
+                {
+                    "external_id": b.external_id,
+                    "title": b.title,
+                    "status": b.status,
+                    "url": b.url,
+                    "sources": [
+                        {"name": s.name, "source_type": s.source_type}
+                        for s in b.sources.all()
+                    ],
+                }
+                for b in corr.bugs.all()
+            ],
+        })
+    return JsonResponse({"correlations": data})
+
+
+def correlated_bugs(request, external_id):
+    bug = get_object_or_404(Bug, external_id=external_id)
+    related = []
+    for corr in bug.correlations.prefetch_related("bugs"):
+        for b in corr.bugs.all():
+            if b.external_id != bug.external_id:
+                related.append({
+                    "external_id": b.external_id,
+                    "title": b.title,
+                    "status": b.status,
+                    "url": b.url,
+                    "correlation_score": corr.confidence_score,
+                    "correlation_reason": corr.match_reason,
+                    "sources": [
+                        {"name": s.name, "source_type": s.source_type}
+                        for s in b.sources.all()
+                    ],
+                })
+    return JsonResponse({"correlated_bugs": related})
