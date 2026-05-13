@@ -1,7 +1,58 @@
-from django.shortcuts import render, get_object_or_404
+import json
+import os
+import threading
+import time
+from io import StringIO
+
+from django.core.management import call_command
 from django.http import JsonResponse
+from django.shortcuts import render, get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+
 from .models import Bug, BugSource
 from .presets import PRESETS
+
+STATUS_FILE = "/tmp/dashboard_ops.json"
+
+
+def read_status():
+    if os.path.exists(STATUS_FILE):
+        try:
+            with open(STATUS_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"running": False, "operation": None, "output": "", "error": None}
+
+
+def write_status(data):
+    with open(STATUS_FILE, "w") as f:
+        json.dump(data, f)
+
+
+def run_command_thread(command, args=None):
+    def target():
+        buf = StringIO()
+        try:
+            kwargs = {"stdout": buf, "stderr": buf}
+            if args:
+                kwargs.update(args)
+            call_command(command, **kwargs)
+            output = buf.getvalue()
+            status = read_status()
+            status["running"] = False
+            status["output"] = output
+            status["error"] = None
+            write_status(status)
+        except Exception as e:
+            status = read_status()
+            status["running"] = False
+            status["output"] = buf.getvalue()
+            status["error"] = str(e)
+            write_status(status)
+
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
 
 
 def get_preset_data(preset_name):
@@ -88,3 +139,37 @@ def presets_data(request):
                 data[preset_name]["status_counts"].get(s, 0) + 1
             )
     return JsonResponse(data)
+
+
+@csrf_exempt
+def run_operation(request, operation_name):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+
+    if operation_name not in ("fetch_bugs", "correlate_prs"):
+        return JsonResponse({"error": f"Unknown operation: {operation_name}"}, status=400)
+
+    status = read_status()
+    if status.get("running"):
+        return JsonResponse({"error": "An operation is already running"}, status=409)
+
+    write_status({
+        "running": True,
+        "operation": operation_name,
+        "output": "",
+        "error": None,
+        "started_at": time.time(),
+    })
+
+    args = {}
+    if operation_name == "correlate_prs":
+        args = {"max_commits": 2000}
+
+    run_command_thread(operation_name, args)
+
+    return JsonResponse({"status": "started", "operation": operation_name})
+
+
+def operation_status(request):
+    status = read_status()
+    return JsonResponse(status)
