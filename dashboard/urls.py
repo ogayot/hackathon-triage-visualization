@@ -9,4 +9,6 @@ urlpatterns = [
     path('api/status/', views.operation_status, name='operation_status'),
     path('api/presets/', views.manage_presets, name='manage_presets'),
     path('api/presets/<int:preset_id>/', views.manage_presets, name='manage_preset'),
+    path("correlations/", views.correlations_json, name="correlations_json"),
+    path("bugs/<str:external_id>/correlated/", views.correlated_bugs, name="correlated_bugs"),
 ]
