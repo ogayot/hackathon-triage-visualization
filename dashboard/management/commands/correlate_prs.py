@@ -6,8 +6,7 @@ import os
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
-from dashboard.models import Bug, BugSource, GitHubPR
-from dashboard.presets import PRESETS
+from dashboard.models import Bug, BugSource, GitHubPR, Preset
 
 logger = logging.getLogger(__name__)
 
@@ -249,11 +248,14 @@ def scan_open_prs(repo_dir, merged_pr_nums, branch="main"):
 
 def get_github_repos(preset_name=None):
     repos = set()
-    targets = {preset_name: PRESETS[preset_name]} if preset_name else PRESETS
-    for name, preset in targets.items():
-        for source_type, identifier in preset["sources"]:
-            if source_type == "github":
-                repos.add(identifier)
+    if preset_name:
+        targets = Preset.objects.filter(name=preset_name)
+    else:
+        targets = Preset.objects.all()
+    for preset in targets:
+        for source in preset.sources.all():
+            if source.source_type == "github":
+                repos.add(source.identifier)
     return sorted(repos)
 
 
@@ -261,7 +263,7 @@ class Command(BaseCommand):
     help = "Correlate GitHub PRs with Launchpad bugs via git (bypasses API rate limit)"
 
     def add_arguments(self, parser):
-        parser.add_argument("--preset", type=str, choices=list(PRESETS.keys()),
+        parser.add_argument("--preset", type=str,
                             help="Only scan repos for a specific preset")
         parser.add_argument("--max-commits", type=int, default=5000,
                             help="Max commits to scan per repo")

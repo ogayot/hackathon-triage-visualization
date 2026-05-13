@@ -4,8 +4,7 @@ from datetime import datetime, timezone
 from django.core.management.base import BaseCommand
 from django.utils.timezone import make_aware
 
-from dashboard.models import Bug, BugSource
-from dashboard.presets import PRESETS
+from dashboard.models import Bug, BugSource, Preset
 
 logger = logging.getLogger(__name__)
 
@@ -206,34 +205,27 @@ class Command(BaseCommand):
         parser.add_argument("--preset", type=str, help="Only fetch for a specific preset")
 
     def handle(self, *args, **options):
-        presets_to_fetch = {}
         if options["preset"]:
-            if options["preset"] in PRESETS:
-                presets_to_fetch[options["preset"]] = PRESETS[options["preset"]]
-            else:
+            try:
+                presets_to_fetch = [Preset.objects.get(name=options["preset"])]
+            except Preset.DoesNotExist:
                 self.stderr.write(f"Unknown preset: {options['preset']}")
                 return
         else:
-            presets_to_fetch = PRESETS
+            presets_to_fetch = Preset.objects.all()
 
         total_created = 0
         total_updated = 0
 
-        for preset_name, preset in presets_to_fetch.items():
-            self.stdout.write(f"Fetching for preset: {preset_name}")
-            for source_type, identifier in preset["sources"]:
-                fetcher = FETCHERS.get(source_type)
+        for preset in presets_to_fetch:
+            self.stdout.write(f"Fetching for preset: {preset.name}")
+            for source in preset.sources.all():
+                fetcher = FETCHERS.get(source.source_type)
                 if not fetcher:
-                    self.stdout.write(f"  No fetcher for {source_type}: {identifier}")
+                    self.stdout.write(f"  No fetcher for {source.source_type}: {source.identifier}")
                     continue
 
-                source, _ = BugSource.objects.get_or_create(
-                    source_type=source_type,
-                    identifier=identifier,
-                    defaults={"name": identifier.split("/")[-1]},
-                )
-
-                self.stdout.write(f"  Fetching {source_type}: {identifier}...")
+                self.stdout.write(f"  Fetching {source.source_type}: {source.identifier}...")
                 bugs = fetcher(source)
 
                 created = 0
