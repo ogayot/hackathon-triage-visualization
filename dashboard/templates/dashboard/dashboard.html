@@ -258,7 +258,7 @@
                                     <th>Title</th>
                                     <th style="width:180px">Source</th>
                                     <th style="width:120px">Status</th>
-                                    <th style="width:60px">PR</th>
+                                    <th style="width:100px">Links</th>
                                 </tr>
                             </thead>
                             <tbody id="bugTableBody">
@@ -279,9 +279,12 @@
                                         {{ bug.status }}
                                     </td>
                                     <td>
-                                        {% with pr_count=bug.github_prs.count %}
+                                        {% with pr_count=bug.github_prs.count corr_count=bug.correlations.count %}
                                         {% if pr_count > 0 %}
                                         <span class="badge bg-success">{{ pr_count }} 🐙</span>
+                                        {% endif %}
+                                        {% if corr_count > 0 %}
+                                        <span class="badge bg-info">{{ corr_count }} 🔗</span>
                                         {% endif %}
                                         {% endwith %}
                                     </td>
@@ -389,6 +392,7 @@ function openBugDetail(externalId) {
                 </ul>
                 ${data.url ? '<a href="' + data.url + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2">View on Launchpad ↗</a>' : ''}
                 ${data.github_prs && data.github_prs.length > 0 ? '<h6 class="mt-3">Related GitHub PRs</h6><ul class="list-unstyled">' + data.github_prs.map(pr => '<li>🐙 <a href="' + pr.url + '" target="_blank">' + pr.repo + '#' + pr.pr_number + '</a>: ' + pr.title + ' <span class="badge bg-' + (pr.state === 'merged' ? 'success' : 'primary') + '">' + pr.state + '</span></li>').join('') + '</ul>' : ''}
+                ${data.correlations && data.correlations.length > 0 ? '<h6 class="mt-3">Correlated Bugs</h6><ul class="list-unstyled">' + data.correlations.map(c => '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + c.reason + ')</span><ul>' + c.bugs.map(b => '<li><a href="/bugs/' + b.external_id + '/" onclick="openBugDetail(\'' + b.external_id + '\');return false;">' + b.external_id + '</a>: ' + b.title + '</li>').join('') + '</ul></li>').join('') + '</ul>' : ''}
             `;
         })
         .catch(() => {
