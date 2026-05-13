@@ -14,4 +14,4 @@ actions:
   claude:      direnv exec /project claude --dangerously-skip-permissions "$@"
   claude-exec: direnv exec /project claude --bare --print "$@"
 
-  app: direnv exec /project python3 manage.py runserver 0.0.0.0:8000
+  app: direnv exec /project python3 manage.py runserver 0.0.0.0:8000 "$@"
