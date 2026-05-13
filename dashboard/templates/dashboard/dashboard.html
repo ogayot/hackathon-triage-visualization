@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bug Aggregator Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f5f5f5; font-family: system-ui, -apple-system, sans-serif; }
+        .sidebar { background: white; border-right: 1px solid #dee2e6; min-height: 100vh; padding: 1.5rem; }
+        .preset-btn { display: block; width: 100%; text-align: left; padding: 0.75rem 1rem; margin-bottom: 0.5rem; border: 1px solid #dee2e6; border-radius: 8px; background: white; cursor: pointer; transition: all 0.15s; text-decoration: none; color: inherit; }
+        .preset-btn:hover { border-color: #0d6efd; background: #f0f7ff; }
+        .preset-btn.active { border-color: #0d6efd; background: #e8f4ff; font-weight: 600; }
+        .summary-card { background: white; border-radius: 12px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .bug-row { cursor: pointer; transition: background 0.1s; }
+        .bug-row:hover { background: #f8f9fa; }
+        .source-badge { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 4px; white-space: nowrap; }
+        .source-key { font-size: 0.85rem; color: #6c757d; }
+        .source-key div { margin-bottom: 0.25rem; }
+        .preset-sources { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-size: 0.9rem; }
+        .preset-sources li { padding: 0.25rem 0; }
+        .status-count { display: inline-flex; align-items: center; gap: 0.25rem; margin-right: 1rem; font-size: 0.9rem; }
+        .search-box { border-radius: 8px; border: 1px solid #dee2e6; padding: 0.5rem 1rem; width: 100%; }
+        .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }
+        .status-dot.New { background: #dc3545; }
+        .status-dot.InProgress { background: #ffc107; }
+        .status-dot.FixCommitted { background: #198754; }
+        .status-dot.FixReleased { background: #198754; }
+        .status-dot.Confirmed { background: #fd7e14; }
+        .status-dot.Triaged { background: #fd7e14; }
+        .status-dot.Incomplete { background: #6c757d; }
+    </style>
+</head>
+<body>
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-2 sidebar">
+            <h5 class="mb-3">🐞 Bug Dashboard</h5>
+            <h6 class="text-muted mb-2">Presets</h6>
+            {% for preset_name in presets.keys %}
+            <a href="?preset={{ preset_name|urlencode }}" class="preset-btn {% if preset_name == current_preset %}active{% endif %}">
+                {{ preset_name }}
+            </a>
+            {% endfor %}
+            <hr>
+            <div class="source-key">
+                <h6 class="text-muted">Source Key</h6>
+                <div>📦 Launchpad</div>
+                <div>🐙 GitHub</div>
+                <div>🐧 Bugzilla</div>
+            </div>
+        </div>
+        <div class="col-10 p-4">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="summary-card">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">{{ current_preset }}</h5>
+                            <span class="text-muted">Total: <strong>{{ total_bugs }}</strong></span>
+                        </div>
+                        <div class="mt-2">
+                            {% for status, count in status_counts.items %}
+                            <span class="status-count">
+                                <span class="status-dot {{ status|cut:" "|cut:"'" }}"></span>
+                                {{ status }} ({{ count }})
+                            </span>
+                            {% empty %}
+                            <span class="text-muted">No bugs imported yet</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-8">
+                    <input type="text" class="search-box" id="searchInput" placeholder="Search bugs..." oninput="filterBugs()">
+                </div>
+                <div class="col-4 text-end">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="location.reload()">🔄 Refresh</button>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-8">
+                    <div class="summary-card p-0">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:80px">ID</th>
+                                    <th>Title</th>
+                                    <th style="width:180px">Source</th>
+                                    <th style="width:120px">Status</th>
+                                    <th style="width:60px">PR</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bugTableBody">
+                                {% for bug in bugs %}
+                                <tr class="bug-row" onclick="openBugDetail('{{ bug.external_id }}')">
+                                    <td style="font-size:0.85rem">{{ bug.external_id }}</td>
+                                    <td>{{ bug.title|truncatechars:60 }}</td>
+                                    <td>
+                                        {% for source in bug.sources.all %}
+                                        <span class="source-badge badge bg-light text-dark me-1">
+                                            {% if source.source_type == 'launchpad' or source.source_type == 'launchpad_package' %}📦{% elif source.source_type == 'github' %}🐙{% else %}🐧{% endif %}
+                                            {{ source.name }}
+                                        </span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        <span class="status-dot {{ bug.status|cut:" "|cut:"'" }}"></span>
+                                        {{ bug.status }}
+                                    </td>
+                                    <td>
+                                        {% with pr_count=bug.github_prs.count %}
+                                        {% if pr_count > 0 %}
+                                        <span class="badge bg-success">{{ pr_count }} 🐙</span>
+                                        {% endif %}
+                                        {% endwith %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted py-4">
+                                        No bugs found. Run <code>python3 manage.py fetch_bugs</code> to import bugs.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-4">
+                    <div class="preset-sources">
+                        <h6 class="mb-2">{{ current_preset }} Sources</h6>
+                        <ul class="list-unstyled mb-0">
+                            {% for source in sources %}
+                            <li>
+                                {% if source.source_type == 'launchpad' or source.source_type == 'launchpad_package' %}📦{% elif source.source_type == 'github' %}🐙{% else %}🐧{% endif %}
+                                {{ source.get_source_type_display }}: {{ source.identifier }}
+                            </li>
+                            {% empty %}
+                            <li class="text-muted">No sources configured</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="bugModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1040;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;max-width:700px;width:90%;max-height:80vh;overflow-y:auto;padding:2rem;position:relative;z-index:1050;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0" id="modalTitle">Bug Detail</h5>
+            <button type="button" class="btn-close" onclick="closeBugDetail()"></button>
+        </div>
+        <div id="modalBody">
+            <div class="text-center text-muted py-4">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+function openBugDetail(externalId) {
+    const modal = document.getElementById('bugModal');
+    const body = document.getElementById('modalBody');
+    const title = document.getElementById('modalTitle');
+    modal.style.display = 'flex';
+    body.innerHTML = '<div class="text-center text-muted py-4">Loading...</div>';
+
+    fetch('/bugs/' + externalId + '/')
+        .then(r => r.json())
+        .then(data => {
+            title.textContent = '#' + data.id + ': ' + data.title;
+            body.innerHTML = `
+                <div class="mb-3">
+                    <span class="badge bg-secondary">${data.status}</span>
+                    ${data.priority ? '<span class="badge bg-warning ms-1">' + data.priority + '</span>' : ''}
+                    <span class="text-muted ms-2">Updated: ${new Date(data.last_updated).toLocaleString()}</span>
+                </div>
+                <p>${data.description || 'No description.'}</p>
+                <h6>Sources</h6>
+                <ul class="list-unstyled">
+                    ${data.sources.map(s => {
+                        let icon = '📦';
+                        if (s.source_type === 'github') icon = '🐙';
+                        if (s.source_type === 'bugzilla') icon = '🐧';
+                        return '<li>' + icon + ' ' + s.name + ' (' + s.source_type + ': ' + s.identifier + ')</li>';
+                    }).join('')}
+                </ul>
+                ${data.url ? '<a href="' + data.url + '" target="_blank" class="btn btn-sm btn-outline-primary mt-2">View on Launchpad ↗</a>' : ''}
+                ${data.github_prs && data.github_prs.length > 0 ? '<h6 class="mt-3">Related GitHub PRs</h6><ul class="list-unstyled">' + data.github_prs.map(pr => '<li>🐙 <a href="' + pr.url + '" target="_blank">' + pr.repo + '#' + pr.pr_number + '</a>: ' + pr.title + ' <span class="badge bg-' + (pr.state === 'merged' ? 'success' : 'primary') + '">' + pr.state + '</span></li>').join('') + '</ul>' : ''}
+            `;
+        })
+        .catch(() => {
+            body.innerHTML = '<div class="text-danger py-4">Failed to load bug details.</div>';
+        });
+}
+
+function closeBugDetail() {
+    document.getElementById('bugModal').style.display = 'none';
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeBugDetail();
+});
+
+function filterBugs() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('.bug-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+    });
+}
+</script>
+</body>
+</html>
