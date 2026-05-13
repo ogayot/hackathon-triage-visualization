@@ -2,6 +2,14 @@
 
 Aggregates bugs from Launchpad, GitHub Issues, and Bugzilla across multiple projects into a single dashboard. Correlates bugs with GitHub PRs by scanning git commit history.
 
+## Prerequisites
+
+```bash
+# From a fresh Ubuntu/Debian container:
+apt update && apt install -y python3 python3-pip git
+pip3 install django launchpadlib
+```
+
 ## Quick Start
 
 ```bash
