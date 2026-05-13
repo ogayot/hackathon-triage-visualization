@@ -7,7 +7,13 @@ Aggregates bugs from Launchpad, GitHub Issues, and Bugzilla across multiple proj
 ```bash
 # From a fresh Ubuntu/Debian container:
 apt update && apt install -y python3 python3-pip git
-pip3 install django launchpadlib
+pip3 install django launchpadlib requests
+```
+
+## Setup
+
+```bash
+python3 manage.py migrate
 ```
 
 ## Quick Start
