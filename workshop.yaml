@@ -10,6 +10,6 @@ sdks:
 
 actions:
   opencode:     direnv exec /project opencode "$@"
-  opencode-run: direnv exec /project opencode run -m openrouter/anthropic/claude-haiku-4.5 "$@"
+  opencode-run: direnv exec /project opencode run -m openrouter/qwen/qwen3-max "$@"
   claude:      direnv exec /project claude --dangerously-skip-permissions "$@"
   claude-exec: direnv exec /project claude --bare --print "$@"
