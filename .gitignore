@@ -142,5 +142,8 @@ Desktop.ini
 # VS Code
 .vscode/
 
+# Git worktrees
+.worktrees/
+
 # Docker
 .dockerignore

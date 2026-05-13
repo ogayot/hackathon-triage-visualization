@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 
@@ -60,3 +61,29 @@ class GitHubPR(models.Model):
 
     def __str__(self):
         return f"{self.repo}#{self.pr_number}: {self.title}"
+
+
+class BugCorrelationQuerySet(models.QuerySet):
+    def for_bug(self, bug):
+        return self.filter(bugs=bug).distinct()
+
+
+class BugCorrelation(models.Model):
+    bugs = models.ManyToManyField(Bug, related_name="correlations")
+    confidence_score = models.FloatField(
+        default=0.0,
+        db_index=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+    )
+    match_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    objects = BugCorrelationQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-confidence_score"]
+
+    def __str__(self):
+        bug_ids = ", ".join(self.bugs.values_list("external_id", flat=True)[:3])
+        return f"Correlation ({self.confidence_score:.2f}): {bug_ids}"
+
