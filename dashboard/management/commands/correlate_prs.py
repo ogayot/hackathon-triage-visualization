@@ -58,10 +58,9 @@ def ensure_repo_clone(repo):
         logger.info(f"Cloning {repo} (bare)...")
         git("clone", "--bare", "--filter=blob:none",
             f"https://github.com/{repo}.git", repo_dir)
-    else:
-        logger.info(f"Fetching latest refs for {repo}...")
-        branch = get_default_branch(repo_dir)
-        git("-C", repo_dir, "fetch", "origin", f"+{branch}", "--quiet")
+    logger.info(f"Fetching latest refs for {repo}...")
+    branch = get_default_branch(repo_dir)
+    git("-C", repo_dir, "fetch", "origin", f"+{branch}", "+refs/pull/*/head:refs/pull/*", "--quiet")
     return repo_dir
 
 
