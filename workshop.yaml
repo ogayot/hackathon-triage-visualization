@@ -13,3 +13,5 @@ actions:
   opencode-run: direnv exec /project opencode run -m openrouter/qwen/qwen3-max "$@"
   claude:      direnv exec /project claude --dangerously-skip-permissions "$@"
   claude-exec: direnv exec /project claude --bare --print "$@"
+
+  app: direnv exec /project python3 manage.py runserver 0.0.0.0:8000
