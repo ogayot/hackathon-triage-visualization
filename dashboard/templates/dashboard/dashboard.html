@@ -157,9 +157,19 @@
         .status-dot.Confirmed { background: var(--status-dot-confirmed); }
         .status-dot.Triaged { background: var(--status-dot-triaged); }
         .status-dot.Incomplete { background: var(--status-dot-incomplete); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #dee2e6; border-top-color: #0d6efd; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; vertical-align: middle; }
+        .op-btn { position: relative; }
+        .op-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .toast-msg { background: var(--card-bg); border-radius: 8px; padding: 12px 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     </style>
 </head>
 <body>
+<div class="toast-container" id="toastContainer"></div>
+
 <div class="container-fluid">
     <div class="row">
         <div class="col-2 sidebar">
@@ -170,6 +180,14 @@
                 {{ preset_name }}
             </a>
             {% endfor %}
+            <hr>
+            <h6 class="text-muted">Operations</h6>
+            <button class="btn btn-outline-primary btn-sm w-100 mb-2 op-btn" id="fetchBtn" onclick="startOperation('fetch_bugs')">
+                📥 Fetch Bugs
+            </button>
+            <button class="btn btn-outline-success btn-sm w-100 mb-2 op-btn" id="correlateBtn" onclick="startOperation('correlate_prs')">
+                🔗 Correlate PRs
+            </button>
             <hr>
             <div class="source-key">
                 <h6 class="text-muted">Source Key</h6>
@@ -255,7 +273,7 @@
                                 {% empty %}
                                 <tr>
                                     <td colspan="5" class="text-center text-muted py-4">
-                                        No bugs found. Run <code>python3 manage.py fetch_bugs</code> to import bugs.
+                                        No bugs found. Click <strong>Fetch Bugs</strong> in the sidebar to import bugs.
                                     </td>
                                 </tr>
                                 {% endfor %}
@@ -347,16 +365,90 @@ function filterBugs() {
     });
 }
 
-// Dark mode toggle functionality
+function showToast(msg, type) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg';
+    if (type === 'error') toast.style.borderLeft = '4px solid #dc3545';
+    else if (type === 'success') toast.style.borderLeft = '4px solid #198754';
+    else toast.style.borderLeft = '4px solid #0d6efd';
+    toast.innerHTML = msg;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; toast.style.transition = 'all 0.3s'; setTimeout(() => toast.remove(), 300); }, 8000);
+}
+
+function startOperation(name) {
+    const btn = document.getElementById(name === 'fetch_bugs' ? 'fetchBtn' : 'correlateBtn');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Running...';
+
+    fetch('/api/run/' + name + '/', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                btn.innerHTML = origText;
+                btn.disabled = false;
+                showToast('⚠️ ' + data.error, 'error');
+                if (data.error.includes('already running')) pollStatus(name);
+                return;
+            }
+            showToast('▶️ ' + name + ' started', 'info');
+            pollStatus(name);
+        })
+        .catch(() => {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+            showToast('⚠️ Failed to start ' + name, 'error');
+        });
+}
+
+function pollStatus(name) {
+    const btn = document.getElementById(name === 'fetch_bugs' ? 'fetchBtn' : 'correlateBtn');
+
+    function check() {
+        fetch('/api/status/')
+            .then(r => r.json())
+            .then(data => {
+                if (data.running) {
+                    setTimeout(check, 2000);
+                } else {
+                    btn.innerHTML = '✅ ' + (name === 'fetch_bugs' ? 'Fetch Bugs' : 'Correlate PRs');
+                    btn.disabled = false;
+                    if (data.error) {
+                        showToast('❌ ' + name + ' failed: ' + data.error, 'error');
+                    } else {
+                        showToast('✅ ' + name + ' completed! Refreshing...', 'success');
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                }
+            })
+            .catch(() => {
+                setTimeout(check, 2000);
+            });
+    }
+    setTimeout(check, 1000);
+}
+
+// Check if an operation was already running on page load
+fetch('/api/status/')
+    .then(r => r.json())
+    .then(data => {
+        if (data.running) {
+            const btn = document.getElementById(data.operation === 'fetch_bugs' ? 'fetchBtn' : 'correlateBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Running...';
+            pollStatus(data.operation);
+        }
+    });
+
 function toggleDarkMode() {
     const body = document.body;
     const toggleIcon = document.getElementById('toggleIcon');
-    
+
     body.classList.toggle('dark-mode');
-    
-    const isDarkMode = body.classList.contains('dark-mode');
-    
-    if (isDarkMode) {
+
+    if (body.classList.contains('dark-mode')) {
         toggleIcon.textContent = '☀️';
         localStorage.setItem('darkMode', 'enabled');
     } else {
@@ -365,18 +457,16 @@ function toggleDarkMode() {
     }
 }
 
-// Check for saved dark mode preference or respect OS preference
 function initDarkMode() {
     const savedMode = localStorage.getItem('darkMode');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     if (savedMode === 'enabled' || (!savedMode && prefersDark)) {
         document.body.classList.add('dark-mode');
         document.getElementById('toggleIcon').textContent = '☀️';
     }
 }
 
-// Initialize dark mode on page load
 document.addEventListener('DOMContentLoaded', initDarkMode);
 </script>
 </body>
