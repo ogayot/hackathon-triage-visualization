@@ -66,6 +66,7 @@
             border-right: 1px solid var(--sidebar-border); 
             min-height: 100vh; 
             padding: 1.5rem; 
+            border-top: 1px solid var(--sidebar-border);
         }
         .preset-btn { 
             display: block; 
@@ -80,6 +81,7 @@
             transition: all 0.15s; 
             text-decoration: none; 
             color: var(--preset-btn-color); 
+            font-weight: normal; 
         }
         .preset-btn:hover { 
             border-color: #0d6efd; 
@@ -95,10 +97,12 @@
             border-radius: 12px; 
             padding: 1.25rem; 
             box-shadow: var(--card-shadow); 
+            border: 1px solid var(--btn-border);
         }
         .bug-row { 
             cursor: pointer; 
             transition: background 0.1s; 
+            background: var(--card-bg);
         }
         .bug-row:hover { 
             background: var(--row-hover-bg); 
@@ -110,6 +114,7 @@
             white-space: nowrap; 
             background: var(--source-badge-bg);
             color: var(--source-badge-color);
+            border: 1px solid var(--btn-border);
         }
         .source-key { 
             font-size: 0.85rem; 
@@ -124,6 +129,7 @@
             padding: 1rem; 
             box-shadow: var(--card-shadow); 
             font-size: 0.9rem; 
+            border: 1px solid var(--btn-border);
         }
         .preset-sources li { 
             padding: 0.25rem 0; 
@@ -142,6 +148,7 @@
             width: 100%; 
             background: var(--btn-bg);
             color: var(--text-color);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
         }
         .status-dot { 
             display: inline-block; 
@@ -149,6 +156,7 @@
             height: 10px; 
             border-radius: 50%; 
             margin-right: 4px; 
+            border: 1px solid var(--text-color);
         }
         .status-dot.New { background: var(--status-dot-new); }
         .status-dot.InProgress { background: var(--status-dot-inprogress); }
@@ -163,7 +171,36 @@
         .op-btn:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
-        .toast-msg { background: var(--card-bg); border-radius: 8px; padding: 12px 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; animation: slideIn 0.3s ease; }
+        .toast-msg { 
+            background: var(--card-bg); 
+            border-radius: 8px; 
+            padding: 12px 20px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            margin-bottom: 8px; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            animation: slideIn 0.3s ease; 
+            border-left: 4px solid var(--btn-border);
+        }
+        .table {
+            background: var(--card-bg);
+        }
+        .table thead th {
+            background: var(--card-bg);
+            color: var(--text-color);
+            border-color: var(--btn-border);
+        }
+        .table tbody tr {
+            background: var(--card-bg);
+        }
+        .table tbody tr:nth-child(even) {
+            background: var(--card-bg);
+        }
+        .table td, .table th {
+            background: var(--card-bg);
+            color: var(--text-color);
+        }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .source-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
         .source-row select, .source-row input { flex: 1; }
@@ -250,9 +287,9 @@
 
             <div class="row">
                 <div class="col-8">
-                    <div class="summary-card p-0">
+                    <div class="summary-card p-0" style="background: var(--card-bg);">
                         <table class="table table-hover mb-0">
-                            <thead class="table-light">
+                            <thead>
                                 <tr>
                                     <th style="width:80px">ID</th>
                                     <th>Title</th>
@@ -268,7 +305,7 @@
                                     <td>{{ bug.title|truncatechars:60 }}</td>
                                     <td>
                                         {% for source in bug.sources.all %}
-                                        <span class="source-badge badge bg-light text-dark me-1">
+                                        <span class="source-badge me-1">
                                             {% if source.source_type == 'launchpad' or source.source_type == 'launchpad_package' %}📦{% elif source.source_type == 'github' %}🐙{% else %}🐧{% endif %}
                                             {{ source.name }}
                                         </span>
@@ -281,7 +318,7 @@
                                     <td>
                                         {% with pr_count=bug.github_prs.count corr_count=bug.correlations.count %}
                                         {% if pr_count > 0 %}
-                                        <span class="badge bg-success">{{ pr_count }} 🐙</span>
+                                        <span class="badge bg-success" style="background-color: var(--status-dot-fixcommitted); color: white;">{{ pr_count }} 🐙</span>
                                         {% endif %}
                                         {% if corr_count > 0 %}
                                         <span class="badge bg-info">{{ corr_count }} 🔗</span>
@@ -333,7 +370,7 @@
 </div>
 
 <div class="modal-backdrop" id="presetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1040;align-items:center;justify-content:center;">
-    <div style="background:white;border-radius:12px;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;padding:2rem;position:relative;z-index:1050;">
+    <div style="background:var(--modal-bg);border-radius:12px;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;padding:2rem;position:relative;z-index:1050;">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0" id="presetModalTitle">New Preset</h5>
             <button type="button" class="btn-close" onclick="closePresetModal()"></button>
@@ -382,8 +419,8 @@ function openBugDetail(externalId) {
             title.textContent = '#' + escapeHtml(data.id) + ': ' + escapeHtml(data.title);
             body.innerHTML = `
                 <div class="mb-3">
-                    <span class="badge bg-secondary">${escapeHtml(data.status)}</span>
-                    ${data.priority ? '<span class="badge bg-warning ms-1">' + escapeHtml(data.priority) + '</span>' : ''}
+                    <span class="badge bg-secondary" style="background-color: var(--status-dot-confirmed); color: white;">${escapeHtml(data.status)}</span>
+                    ${data.priority ? '<span class="badge bg-warning ms-1" style="background-color: var(--status-dot-confirmed); color: white;">' + escapeHtml(data.priority) + '</span>' : ''}
                     <span class="text-muted ms-2">Updated: ${new Date(data.last_updated).toLocaleString()}</span>
                 </div>
                 <p>${data.description ? escapeHtml(data.description) : 'No description.'}</p>
