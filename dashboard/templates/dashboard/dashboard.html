@@ -413,7 +413,7 @@ function openBugDetail(externalId) {
     modal.style.display = 'flex';
     body.innerHTML = '<div class="text-center text-muted py-4">Loading...</div>';
 
-    fetch('/bugs/' + externalId + '/')
+    fetch('/bugs/' + encodeURIComponent(externalId) + '/')
         .then(r => r.json())
         .then(data => {
             title.textContent = '#' + escapeHtml(data.id) + ': ' + escapeHtml(data.title);
@@ -438,7 +438,7 @@ function openBugDetail(externalId) {
                 ${data.correlations && data.correlations.length > 0 ? '<h6 class="mt-3">Correlated Bugs</h6><ul class="list-unstyled">' + data.correlations.map(c => {
                     const otherBugs = c.bugs.filter(b => b.external_id !== data.id);
                     if (otherBugs.length === 0) return '';
-                    return '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + escapeHtml(c.reason) + ')</span><ul>' + otherBugs.map(b => '<li><a href="/bugs/' + encodeURIComponent(b.external_id) + '/" onclick="openBugDetail(\'' + escapeHtml(b.external_id).replace(/'/g, "\\'") + '\');return false;">' + escapeHtml(b.external_id) + '</a>: ' + escapeHtml(b.title) + '</li>').join('') + '</ul></li>';
+                    return '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + escapeHtml(c.reason) + ')</span><ul>' + otherBugs.map(b => '<li><a href="/bugs/' + encodeURIComponent(b.external_id) + '/" onclick="openBugDetail(\'' + b.external_id.replace(/'/g, "\\'") + '\');return false;">' + escapeHtml(b.external_id) + '</a>: ' + escapeHtml(b.title) + '</li>').join('') + '</ul></li>';
                 }).join('') + '</ul>' : ''}
             `;
         })
