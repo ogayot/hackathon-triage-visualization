@@ -26,6 +26,7 @@ class Bug(models.Model):
     sources = models.ManyToManyField(BugSource, related_name='bugs')
     url = models.URLField(max_length=500, blank=True)
     last_updated = models.DateTimeField()
+    private = models.BooleanField(default=False)
     analysis = models.TextField(blank=True)
     analysis_updated_at = models.DateTimeField(null=True, blank=True)
 

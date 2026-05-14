@@ -62,6 +62,7 @@ def fetch_launchpad_bugs(source):
             "priority": getattr(task, "importance", ""),
             "url": bug.web_link,
             "last_updated": to_aware(bug.date_last_updated),
+            "private": getattr(bug, "private", False),
         })
 
     return bugs
@@ -275,6 +276,7 @@ class Command(BaseCommand):
                         "priority": bug_data["priority"],
                         "url": bug_data["url"],
                         "last_updated": bug_data["last_updated"],
+                        "private": bug_data.get("private", False),
                     },
                 )
                 bug.sources.add(source)

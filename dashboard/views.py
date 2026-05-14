@@ -110,6 +110,7 @@ def bug_detail(request, external_id):
         "status": bug.status,
         "priority": bug.priority,
         "url": bug.url,
+        "private": bug.private,
         "last_updated": bug.last_updated.isoformat(),
         "sources": [
             {

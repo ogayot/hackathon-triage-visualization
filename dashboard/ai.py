@@ -41,6 +41,9 @@ def _fetch_lp_bug_context(external_id):
     launchpad = Launchpad.login_anonymously("bug-dashboard", "production", version="devel")
     lp_bug = launchpad.bugs[int(bug_id)]
 
+    if getattr(lp_bug, "private", False):
+        raise PermissionError("AI analysis is disabled for private bugs")
+
     comments_text = []
     total_bytes = len(lp_bug.description or "")
 
@@ -243,6 +246,9 @@ def analyze_bug(external_id, decision=None):
     bug = Bug.objects.filter(external_id=external_id).first()
     if not bug:
         return {"status": "error", "error": "Bug not found"}
+
+    if bug.private:
+        return {"status": "error", "error": "AI analysis is disabled for private bugs"}
 
     config = AnalysisConfig.objects.first()
     if not config:
