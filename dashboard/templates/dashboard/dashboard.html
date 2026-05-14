@@ -260,6 +260,24 @@
             {% endfor %}
             </div>
             <hr>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-muted mb-0">Views</h6>
+                <button class="btn btn-sm btn-outline-primary" onclick="openViewModal()" title="Add View">+</button>
+            </div>
+            <div id="viewList">
+                {% for view in views_list %}
+                <div style="position:relative;display:flex;align-items:center;">
+                    <a href="?preset={{ current_preset|urlencode }}&view={{ view.tag }}" class="preset-btn {% if view.tag == current_view %}active{% endif %}" style="flex:1;">
+                        {{ view.name }}
+                    </a>
+                    <span class="preset-edit" onclick="event.preventDefault();event.stopPropagation();openViewModal('{{ view.id }}')">✏️</span>
+                    <span class="preset-delete" onclick="event.preventDefault();event.stopPropagation();deleteView('{{ view.id }}')">🗑️</span>
+                </div>
+                {% empty %}
+                <div class="text-muted small mb-2">No views for this preset</div>
+                {% endfor %}
+            </div>
+            <hr>
             <h6 class="text-muted">Operations</h6>
             <button class="btn btn-outline-primary btn-sm w-100 mb-2 op-btn" id="fetchBtn" onclick="startOperation('fetch_bugs')">
                 📥 Fetch Bugs
@@ -428,9 +446,33 @@
     </div>
 </div>
 
+<div class="modal-backdrop" id="viewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1040;align-items:center;justify-content:center;">
+    <div style="background:var(--modal-bg);border-radius:12px;max-width:500px;width:90%;padding:2rem;position:relative;z-index:1050;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0" id="viewModalTitle">New View</h5>
+            <button type="button" class="btn-close" onclick="closeViewModal()"></button>
+        </div>
+        <form id="viewForm" onsubmit="saveView(event)">
+            <div class="mb-3">
+                <label class="form-label">View Name</label>
+                <input type="text" class="form-control" id="viewName" required placeholder="e.g. Noble">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Launchpad Tag</label>
+                <input type="text" class="form-control" id="viewTag" required placeholder="e.g. noble">
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" id="viewSaveBtn">Save View</button>
+                <button type="button" class="btn btn-secondary" onclick="closeViewModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 let editingPresetId = null;
 let sourceRowCounter = 0;
+let editingViewId = null;
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -484,7 +526,7 @@ function closeBugDetail() {
 }
 
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { closeBugDetail(); closePresetModal(); }
+    if (e.key === 'Escape') { closeBugDetail(); closePresetModal(); closeViewModal(); }
 });
 
 let statusFilters = new Set();
@@ -751,6 +793,96 @@ function deletePreset(presetName) {
                         showToast('⚠️ ' + data.error, 'error');
                     } else {
                         showToast('✅ Preset "' + presetName + '" deleted', 'success');
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                });
+        });
+}
+
+function openViewModal(viewId) {
+    editingViewId = null;
+    document.getElementById('viewModalTitle').textContent = 'New View';
+    document.getElementById('viewName').value = '';
+    document.getElementById('viewTag').value = '';
+    document.getElementById('viewSaveBtn').textContent = 'Save View';
+
+    if (viewId) {
+        const presetParam = new URLSearchParams(window.location.search).get('preset') || 'Subiquity';
+        fetch('/api/presets/?name=' + encodeURIComponent(presetParam))
+            .then(r => r.json())
+            .then(presets => {
+                const p = presets.find(pr => pr.name === presetParam);
+                if (!p) return;
+                fetch('/api/presets/' + p.id + '/views/' + viewId + '/')
+                    .then(r => r.json())
+                    .then(data => {
+                        editingViewId = viewId;
+                        document.getElementById('viewModalTitle').textContent = 'Edit View';
+                        document.getElementById('viewName').value = data.name;
+                        document.getElementById('viewTag').value = data.tag;
+                        document.getElementById('viewSaveBtn').textContent = 'Update View';
+                    });
+            });
+    }
+
+    document.getElementById('viewModal').style.display = 'flex';
+}
+
+function closeViewModal() {
+    document.getElementById('viewModal').style.display = 'none';
+}
+
+function saveView(event) {
+    event.preventDefault();
+    const name = document.getElementById('viewName').value.trim();
+    const tag = document.getElementById('viewTag').value.trim();
+    if (!name) { showToast('⚠️ View name is required', 'error'); return; }
+    if (!tag) { showToast('⚠️ Tag is required', 'error'); return; }
+
+    const presetParam = new URLSearchParams(window.location.search).get('preset') || 'Subiquity';
+    fetch('/api/presets/?name=' + encodeURIComponent(presetParam))
+        .then(r => r.json())
+        .then(presets => {
+            const p = presets.find(pr => pr.name === presetParam);
+            if (!p) { showToast('⚠️ Preset not found', 'error'); return; }
+
+            const url = editingViewId
+                ? '/api/presets/' + p.id + '/views/' + editingViewId + '/'
+                : '/api/presets/' + p.id + '/views/';
+            fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name, tag: tag }),
+            })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        showToast('⚠️ ' + data.error, 'error');
+                    } else {
+                        showToast('✅ View "' + name + '" saved!', 'success');
+                        closeViewModal();
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                })
+                .catch(() => showToast('⚠️ Failed to save view', 'error'));
+        });
+}
+
+function deleteView(viewId) {
+    if (!confirm('Delete this view?')) return;
+    const presetParam = new URLSearchParams(window.location.search).get('preset') || 'Subiquity';
+    fetch('/api/presets/?name=' + encodeURIComponent(presetParam))
+        .then(r => r.json())
+        .then(presets => {
+            const p = presets.find(pr => pr.name === presetParam);
+            if (!p) return;
+            fetch('/api/presets/' + p.id + '/views/' + viewId + '/', { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        showToast('⚠️ ' + data.error, 'error');
+                    } else {
+                        showToast('✅ View deleted', 'success');
                         setTimeout(() => location.reload(), 1000);
                     }
                 });

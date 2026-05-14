@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 from django.utils.timezone import make_aware
 
 from dashboard.management.progress import write_progress, check_cancelled
-from dashboard.models import Bug, BugSource, Preset
+from dashboard.models import Bug, BugSource, Preset, Tag
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ def fetch_launchpad_bugs(source):
             "priority": getattr(task, "importance", ""),
             "url": bug.web_link,
             "last_updated": to_aware(bug.date_last_updated),
+            "tags": list(bug.tags),
         })
 
     return bugs
@@ -278,6 +279,10 @@ class Command(BaseCommand):
                     },
                 )
                 bug.sources.add(source)
+                tag_names = bug_data.get("tags", [])
+                if tag_names:
+                    tag_objs = [Tag.objects.get_or_create(name=t)[0] for t in tag_names]
+                    bug.tags.set(tag_objs)
                 if was_created:
                     created += 1
                 else:

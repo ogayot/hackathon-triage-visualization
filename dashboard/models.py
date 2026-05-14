@@ -17,6 +17,13 @@ class BugSource(models.Model):
         return f"{self.get_source_type_display()}: {self.identifier}"
 
 
+class Tag(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Bug(models.Model):
     external_id = models.CharField(max_length=200, unique=True)
     title = models.CharField(max_length=500)
@@ -26,6 +33,7 @@ class Bug(models.Model):
     sources = models.ManyToManyField(BugSource, related_name='bugs')
     url = models.URLField(max_length=500, blank=True)
     last_updated = models.DateTimeField()
+    tags = models.ManyToManyField(Tag, related_name='bugs', blank=True)
 
     class Meta:
         ordering = ['-last_updated']
@@ -86,4 +94,18 @@ class BugCorrelation(models.Model):
     def __str__(self):
         bug_ids = ", ".join(self.bugs.values_list("external_id", flat=True)[:3])
         return f"Correlation ({self.confidence_score:.2f}): {bug_ids}"
+
+
+class View(models.Model):
+    preset = models.ForeignKey(Preset, on_delete=models.CASCADE, related_name="views")
+    name = models.CharField(max_length=100)
+    tag = models.CharField(max_length=100)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+        unique_together = [("preset", "name")]
+
+    def __str__(self):
+        return f"{self.preset.name} / {self.name}"
 

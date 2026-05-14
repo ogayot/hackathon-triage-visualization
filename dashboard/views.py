@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from .management.progress import read_progress, request_cancel, clear_cancel, check_cancelled, reap_stale_cancel
-from .models import Bug, BugSource, Preset, BugCorrelation
+from .models import Bug, BugSource, Preset, BugCorrelation, View
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
 
@@ -84,10 +84,17 @@ def dashboard(request):
     preset_name = request.GET.get("preset", "Subiquity")
     bugs, sources = get_preset_data(preset_name)
 
+    view_tag = request.GET.get("view")
+    if view_tag:
+        bugs = bugs.filter(tags__name=view_tag)
+
     status_counts = {}
     for bug in bugs:
         s = bug.status
         status_counts[s] = status_counts.get(s, 0) + 1
+
+    preset_obj = Preset.objects.filter(name=preset_name).first()
+    views_list = list(preset_obj.views.all()) if preset_obj else []
 
     context = {
         "presets": {p.name: p for p in Preset.objects.all()},
@@ -96,6 +103,8 @@ def dashboard(request):
         "sources": sources,
         "status_counts": status_counts,
         "total_bugs": bugs.count(),
+        "current_view": view_tag or "",
+        "views_list": views_list,
     }
     return render(request, "dashboard/dashboard.html", context)
 
@@ -332,3 +341,51 @@ def correlated_bugs(request, external_id):
                     ],
                 })
     return JsonResponse({"correlated_bugs": related})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE"])
+def manage_views(request, preset_id, view_id=None):
+    preset = get_object_or_404(Preset, id=preset_id)
+
+    if request.method == "GET":
+        if view_id:
+            v = get_object_or_404(View, id=view_id, preset=preset)
+            return JsonResponse({"id": v.id, "name": v.name, "tag": v.tag})
+        views_list = [
+            {"id": v.id, "name": v.name, "tag": v.tag}
+            for v in preset.views.all()
+        ]
+        return JsonResponse(views_list, safe=False)
+
+    if request.method == "POST":
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+        name = body.get("name", "").strip()
+        tag = body.get("tag", "").strip()
+        if not name or not tag:
+            return JsonResponse({"error": "Name and tag are required"}, status=400)
+
+        if view_id:
+            v = get_object_or_404(View, id=view_id, preset=preset)
+            if View.objects.filter(preset=preset, name=name).exclude(id=view_id).exists():
+                return JsonResponse({"error": "A view with this name already exists in this preset"}, status=409)
+            v.name = name
+            v.tag = tag
+            v.save()
+            return JsonResponse({"id": v.id, "name": v.name, "tag": v.tag})
+        else:
+            if View.objects.filter(preset=preset, name=name).exists():
+                return JsonResponse({"error": "A view with this name already exists in this preset"}, status=409)
+            v = View.objects.create(preset=preset, name=name, tag=tag)
+            return JsonResponse({"id": v.id, "name": v.name, "tag": v.tag}, status=201)
+
+    if request.method == "DELETE":
+        if not view_id:
+            return JsonResponse({"error": "View ID required"}, status=400)
+        v = get_object_or_404(View, id=view_id, preset=preset)
+        v.delete()
+        return JsonResponse({"status": "deleted"})

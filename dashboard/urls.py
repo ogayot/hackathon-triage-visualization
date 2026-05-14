@@ -11,6 +11,8 @@ urlpatterns = [
     path('api/cancel/', views.cancel_operation, name='cancel_operation'),
     path('api/presets/', views.manage_presets, name='manage_presets'),
     path('api/presets/<int:preset_id>/', views.manage_presets, name='manage_preset'),
+    path('api/presets/<int:preset_id>/views/', views.manage_views, name='manage_views'),
+    path('api/presets/<int:preset_id>/views/<int:view_id>/', views.manage_views, name='manage_view'),
     path("correlations/", views.correlations_json, name="correlations_json"),
     path("bugs/<path:external_id>/correlated/", views.correlated_bugs, name="correlated_bugs"),
 ]
