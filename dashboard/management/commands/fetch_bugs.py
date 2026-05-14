@@ -20,13 +20,21 @@ def to_aware(dt):
 
 def fetch_launchpad_bugs(source):
     import os
+    from launchpadlib.credentials import UnencryptedFileCredentialStore
     from launchpadlib.launchpad import Launchpad
 
-    creds_dir = os.path.expanduser("~/.launchpadlib/bug-dashboard")
-    if os.path.exists(creds_dir):
-        launchpad = Launchpad.login_with("bug-dashboard", "production", version="devel")
+    cred_path = os.path.expanduser("~/.launchpadlib/bug-dashboard-credentials")
+    if os.path.exists(cred_path):
+        cred_store = UnencryptedFileCredentialStore(cred_path)
+        launchpad = Launchpad.login_with(
+            "bug-dashboard", "production",
+            version="devel",
+            credential_store=cred_store,
+        )
+        logger.info("Authenticated with Launchpad (including private bugs)")
     else:
         launchpad = Launchpad.login_anonymously("bug-dashboard", "production", version="devel")
+        logger.info("No Launchpad credentials found, fetching public bugs only")
 
     bugs = []
     try:
