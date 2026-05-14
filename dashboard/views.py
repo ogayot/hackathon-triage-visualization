@@ -10,7 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from .management.progress import read_progress, request_cancel, clear_cancel, check_cancelled
+from .management.progress import read_progress, request_cancel, clear_cancel, check_cancelled, reap_stale_cancel
 from .models import Bug, BugSource, Preset, BugCorrelation
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
@@ -154,6 +154,10 @@ def run_operation(request, operation_name):
     status = read_status()
     if status.get("running"):
         return JsonResponse({"error": "An operation is already running"}, status=409)
+    if status.get("cancelled"):
+        if reap_stale_cancel():
+            return JsonResponse({"error": "A cancelled operation was still running, but has now been cleaned up. Please try again."}, status=409)
+        return JsonResponse({"error": "An operation is being cancelled, please wait a moment"}, status=409)
 
     write_status({
         "running": True,

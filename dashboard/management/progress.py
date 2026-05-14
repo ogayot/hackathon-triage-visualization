@@ -49,11 +49,13 @@ def clear_progress():
 def request_cancel():
     data = read_status()
     data["cancelled"] = True
+    data["cancelled_at"] = time.time()
     write_status(data)
 
 def clear_cancel():
     data = read_status()
     data.pop("cancelled", None)
+    data.pop("cancelled_at", None)
     write_status(data)
 
 def check_cancelled():
@@ -62,6 +64,18 @@ def check_cancelled():
         data["running"] = False
         data["error"] = "Cancelled"
         data.pop("cancelled", None)
+        data.pop("cancelled_at", None)
         write_status(data)
         return True
+    return False
+
+def reap_stale_cancel():
+    data = read_status()
+    if data.get("cancelled"):
+        if data.get("cancelled_at") is None or time.time() - data["cancelled_at"] > 30:
+            data.pop("cancelled", None)
+            data.pop("cancelled_at", None)
+            data["running"] = False
+            write_status(data)
+            return True
     return False

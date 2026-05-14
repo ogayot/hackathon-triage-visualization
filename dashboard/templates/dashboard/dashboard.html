@@ -554,7 +554,6 @@ function startOperation(name) {
                 btn.innerHTML = origText;
                 btn.disabled = false;
                 showToast('⚠️ ' + data.error, 'error');
-                if (data.error.includes('already running')) pollStatus(name);
                 return;
             }
             showToast('▶️ ' + name + ' started', 'info');
@@ -575,7 +574,12 @@ function pollStatus(name) {
         fetch('/api/status/')
             .then(r => r.json())
             .then(data => {
-                if (data.status.running) {
+                if (data.status.cancelled) {
+                    cancelBtn.style.display = 'none';
+                    btn.innerHTML = '<span class="spinner"></span> Cancelling...';
+                    btn.disabled = true;
+                    setTimeout(check, 2000);
+                } else if (data.status.running) {
                     cancelBtn.style.display = '';
                     setTimeout(check, 2000);
                 } else {

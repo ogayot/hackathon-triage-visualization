@@ -314,10 +314,21 @@ class Command(BaseCommand):
             )
             try:
                 branch = get_default_branch(repo_dir)
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
                 merge_results = scan_merge_repo(repo_dir, branch, 500)
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
                 squash_results = scan_squash_repo(repo_dir, branch, max_commits)
-
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
                 merged_nums = get_merged_pr_numbers(repo_dir, branch, max_commits)
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
                 open_results = scan_open_prs(repo_dir, merged_nums, branch)
             except RuntimeError as e:
                 self.stdout.write(self.style.ERROR(f"  Scan failed: {e}"))

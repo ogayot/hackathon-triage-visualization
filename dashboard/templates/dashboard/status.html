@@ -302,7 +302,26 @@ function updateStatus() {
             const cancelBtn = document.getElementById('cancelBtnStatus');
             const elapsedDisplay = document.getElementById('elapsedDisplay');
 
-            if (status.running) {
+            if (status.cancelled) {
+                cancelBtn.style.display = 'none';
+                document.getElementById('elapsedDisplay').style.display = '';
+                opDiv.innerHTML = `
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="spinner"></span>
+                        <strong class="ms-2" style="font-size:1.1rem">Cancelling...</strong>
+                    </div>
+                    <div class="detail-grid mt-2">
+                        <dt>Started</dt>
+                        <dd>${startedAt ? new Date(startedAt).toLocaleString() : '--'}</dd>
+                        <dt>Elapsed</dt>
+                        <dd><span id="elapsedValue">${formatDurationMs(Date.now() - (startedAt || Date.now()))}</span></dd>
+                    </div>
+                `;
+                progDiv.innerHTML = `<div class="progress"><div class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width: 100%">Cancelling...</div></div>`;
+                progMsg.innerHTML = '<span class="text-warning">Waiting for operation to stop...</span>';
+                detDiv.innerHTML = '<div class="text-muted">Cancel requested — stopping...</div>';
+                statusDot.innerHTML = '<span class="spinner"></span>';
+            } else if (status.running) {
                 cancelBtn.style.display = '';
                 startedAt = status.started_at * 1000;
                 if (!elapsedInterval) {
@@ -592,7 +611,6 @@ function startOperation(name) {
                 btn.innerHTML = origText;
                 btn.disabled = false;
                 showToast('⚠️ ' + data.error, 'error');
-                if (data.error.includes('already running')) pollStatus(name);
                 return;
             }
             showToast('▶️ ' + name + ' started', 'info');
