@@ -192,6 +192,7 @@ def cancel_operation(request):
 
 
 def operation_status(request):
+    reap_stale_cancel()
     status = read_status()
     progress = read_progress()
     return JsonResponse({"status": status, "progress": progress})
