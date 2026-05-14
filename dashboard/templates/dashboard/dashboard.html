@@ -290,6 +290,7 @@
                                 <button id="darkModeToggle" class="btn btn-outline-secondary btn-sm ms-2" onclick="toggleDarkMode()">
                                     <span id="toggleIcon">🌙</span>
                                 </button>
+                                <button class="btn btn-outline-secondary btn-sm ms-1" onclick="openAiConfigModal()" title="AI Analysis Settings">⚙️</button>
                             </div>
                         </div>
                         <div class="mt-2" id="statusFilters">
@@ -428,6 +429,44 @@
     </div>
 </div>
 
+<div class="modal-backdrop" id="aiConfigModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1040;align-items:center;justify-content:center;">
+    <div style="background:var(--modal-bg);border-radius:12px;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;padding:2rem;position:relative;z-index:1050;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">🤖 AI Analysis Settings</h5>
+            <button type="button" class="btn-close" onclick="closeAiConfigModal()"></button>
+        </div>
+        <form id="aiConfigForm" onsubmit="saveAiConfig(event)">
+            <div class="mb-3">
+                <label class="form-label">System Prompt (instructions for the AI)</label>
+                <textarea class="form-control" id="aiSystemPrompt" rows="6" style="font-family:monospace;font-size:0.85rem"></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">OpenRouter API Key</label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="aiApiKey" placeholder="sk-or-v1-...">
+                    <button type="button" class="btn btn-outline-secondary" id="aiKeyToggle" onclick="toggleAiKeyVisibility()" style="min-width:40px">👁️</button>
+                </div>
+                <small class="text-muted" id="aiApiKeyStatus"></small>
+            </div>
+            <div class="row mb-3">
+                <div class="col-6">
+                    <label class="form-label">Auto-analyze max bytes</label>
+                    <input type="number" class="form-control" id="aiMaxBytes" min="0">
+                    <small class="text-muted">If context is under this, analyze automatically</small>
+                </div>
+                <div class="col-6">
+                    <label class="form-label">Max response tokens</label>
+                    <input type="number" class="form-control" id="aiMaxTokens" min="100">
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+                <button type="button" class="btn btn-secondary" onclick="closeAiConfigModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
 let editingPresetId = null;
 let sourceRowCounter = 0;
@@ -472,6 +511,25 @@ function openBugDetail(externalId) {
                     if (otherBugs.length === 0) return '';
                     return '<li>🔗 Score: ' + c.score + ' <span class="text-muted">(' + escapeHtml(c.reason) + ')</span><ul>' + otherBugs.map(b => '<li><a href="/bugs/' + encodeURIComponent(b.external_id) + '/" onclick="openBugDetail(\'' + b.external_id.replace(/'/g, "\\'") + '\');return false;">' + escapeHtml(b.external_id) + '</a>: ' + escapeHtml(b.title) + '</li>').join('') + '</ul></li>';
                 }).join('') + '</ul>' : ''}
+                <hr class="mt-3">
+                <div id="aiAnalysisSection">
+                    ${data.analysis ? `
+                        <div class="summary-card p-3" style="font-size:0.9rem;line-height:1.5;background:var(--card-bg);border:1px solid var(--btn-border);border-left:3px solid #0d6efd">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>🤖 AI Analysis</strong>
+                                <span class="badge bg-secondary" style="font-size:0.7rem">cached</span>
+                            </div>
+                            <div style="white-space:pre-wrap">${escapeHtml(data.analysis)}</div>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-outline-secondary" onclick="analyzeBug('${escapeHtml(data.id)}')">🔄 Re-analyze</button>
+                            </div>
+                        </div>
+                    ` : `
+                        <button class="btn btn-sm btn-outline-secondary" id="analyzeBtn" onclick="analyzeBug('${escapeHtml(data.id)}')">🤖 AI Analysis</button>
+                        <div id="aiSummary" class="mt-2" style="display:none"></div>
+                        <div id="aiDecision" class="mt-2" style="display:none"></div>
+                    `}
+                </div>
             `;
         })
         .catch(() => {
@@ -484,7 +542,7 @@ function closeBugDetail() {
 }
 
 document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') { closeBugDetail(); closePresetModal(); }
+    if (e.key === 'Escape') { closeBugDetail(); closePresetModal(); closeAiConfigModal(); }
 });
 
 let statusFilters = new Set();
@@ -795,6 +853,147 @@ function initDarkMode() {
 }
 
 document.addEventListener('DOMContentLoaded', initDarkMode);
+
+let currentAnalyzeId = null;
+
+function analyzeBug(externalId) {
+    currentAnalyzeId = externalId;
+    const btn = document.getElementById('analyzeBtn');
+    const summaryDiv = document.getElementById('aiSummary');
+    const decisionDiv = document.getElementById('aiDecision');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+    summaryDiv.style.display = 'none';
+    decisionDiv.style.display = 'none';
+
+    fetch('/api/analyze/' + encodeURIComponent(externalId) + '/', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'needs_decision') {
+                btn.style.display = 'none';
+                decisionDiv.style.display = '';
+                decisionDiv.innerHTML = `
+                    <div class="alert alert-warning py-2 mb-2" style="font-size:0.9rem;background:var(--card-bg);border:1px solid var(--btn-border);color:var(--text-color)">
+                        <strong>Large bug context</strong> — ${_fmtSize(data.total_bytes)} total (${data.attachment_count} attachments, ${data.comment_count} comments).
+                        Include attachment contents in the analysis?
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" onclick="analyzeWithDecision('include_all')">📎 Include attachments</button>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="analyzeWithDecision('skip_attachments')">Skip attachments</button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="clearAiSection()">Cancel</button>
+                    </div>
+                `;
+            } else if (data.status === 'ok') {
+                btn.style.display = 'none';
+                summaryDiv.style.display = '';
+                summaryDiv.innerHTML = '<div class="summary-card p-3" style="font-size:0.9rem;line-height:1.5;background:var(--card-bg);border:1px solid var(--btn-border);border-left:3px solid #0d6efd">' +
+                    '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                        '<strong>🤖 AI Analysis</strong>' +
+                        (data.cached ? '<span class="badge bg-secondary" style="font-size:0.7rem">cached</span>' : '') +
+                    '</div>' +
+                    '<div style="white-space:pre-wrap">' + escapeHtml(data.summary) + '</div>' +
+                    (!data.cached ? '<div class="mt-2"><button class="btn btn-sm btn-outline-secondary" onclick="analyzeBug(currentAnalyzeId)">🔄 Re-analyze</button></div>' : '') +
+                '</div>';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '🤖 AI Analysis';
+                showToast('⚠️ Analysis failed: ' + (data.error || 'unknown error'), 'error');
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '🤖 AI Analysis';
+            showToast('⚠️ Failed to analyze bug', 'error');
+        });
+}
+
+function analyzeWithDecision(decision) {
+    const decisionDiv = document.getElementById('aiDecision');
+    decisionDiv.innerHTML = '<span class="spinner"></span> Analyzing...';
+    fetch('/api/analyze/' + encodeURIComponent(currentAnalyzeId) + '/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: decision }),
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                decisionDiv.style.display = 'none';
+                const summaryDiv = document.getElementById('aiSummary');
+                summaryDiv.style.display = '';
+                summaryDiv.innerHTML = '<div class="summary-card p-3" style="font-size:0.9rem;line-height:1.5;background:var(--card-bg);border:1px solid var(--btn-border);border-left:3px solid #0d6efd">' +
+                    '<strong>🤖 AI Analysis</strong>' +
+                    '<div style="white-space:pre-wrap">' + escapeHtml(data.summary) + '</div>' +
+                    '<div class="mt-2"><button class="btn btn-sm btn-outline-secondary" onclick="analyzeBug(currentAnalyzeId)">🔄 Re-analyze</button></div>' +
+                '</div>';
+            } else {
+                decisionDiv.innerHTML = '<div class="text-danger">Analysis failed: ' + escapeHtml(data.error || 'unknown error') + '</div>';
+            }
+        });
+}
+
+function clearAiSection() {
+    document.getElementById('aiDecision').style.display = 'none';
+    document.getElementById('aiSummary').style.display = 'none';
+    const btn = document.getElementById('analyzeBtn');
+    btn.style.display = '';
+    btn.disabled = false;
+    btn.innerHTML = '🤖 AI Analysis';
+}
+
+function _fmtSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function openAiConfigModal() {
+    fetch('/api/analyze-config/')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('aiSystemPrompt').value = data.system_prompt;
+            document.getElementById('aiApiKey').value = data.api_key || '';
+            document.getElementById('aiApiKey').placeholder = data.api_key_set ? '(key saved — enter to replace)' : 'sk-or-v1-...';
+            document.getElementById('aiApiKeyStatus').textContent = data.api_key_set ? '✅ Key is configured' : '❌ No key configured — set one above to use AI analysis';
+            document.getElementById('aiMaxBytes').value = data.auto_analyze_max_bytes;
+            document.getElementById('aiMaxTokens').value = data.max_tokens;
+        });
+    document.getElementById('aiConfigModal').style.display = 'flex';
+}
+
+function closeAiConfigModal() {
+    document.getElementById('aiConfigModal').style.display = 'none';
+}
+
+function toggleAiKeyVisibility() {
+    const input = document.getElementById('aiApiKey');
+    input.type = input.type === 'password' ? 'text' : 'password';
+}
+
+function saveAiConfig(event) {
+    event.preventDefault();
+    fetch('/api/analyze-config/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            system_prompt: document.getElementById('aiSystemPrompt').value,
+            api_key: document.getElementById('aiApiKey').value,
+            auto_analyze_max_bytes: parseInt(document.getElementById('aiMaxBytes').value) || 51200,
+            max_tokens: parseInt(document.getElementById('aiMaxTokens').value) || 2000,
+        }),
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showToast('⚠️ ' + data.error, 'error');
+            } else {
+                showToast('✅ AI settings saved', 'success');
+                closeAiConfigModal();
+            }
+        })
+        .catch(() => showToast('⚠️ Failed to save AI settings', 'error'));
+}
 </script>
 </body>
 </html>

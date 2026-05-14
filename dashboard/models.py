@@ -26,6 +26,8 @@ class Bug(models.Model):
     sources = models.ManyToManyField(BugSource, related_name='bugs')
     url = models.URLField(max_length=500, blank=True)
     last_updated = models.DateTimeField()
+    analysis = models.TextField(blank=True)
+    analysis_updated_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-last_updated']
@@ -86,4 +88,20 @@ class BugCorrelation(models.Model):
     def __str__(self):
         bug_ids = ", ".join(self.bugs.values_list("external_id", flat=True)[:3])
         return f"Correlation ({self.confidence_score:.2f}): {bug_ids}"
+
+
+class AnalysisConfig(models.Model):
+    system_prompt = models.TextField(
+        default="You are a bug triage assistant. Analyze the bug report and provide a concise summary covering: root cause, affected components, reproduction steps, impact severity, and any workarounds mentioned."
+    )
+    api_key = models.CharField(max_length=500, blank=True)
+    auto_analyze_max_bytes = models.IntegerField(default=51200)
+    max_tokens = models.IntegerField(default=2000)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Analysis Configuration"
+
+    def __str__(self):
+        return "AI Analysis Configuration"
 

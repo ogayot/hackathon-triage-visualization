@@ -10,8 +10,9 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .ai import analyze_bug
 from .management.progress import read_progress, request_cancel, clear_cancel, check_cancelled, reap_stale_cancel
-from .models import Bug, BugSource, Preset, BugCorrelation
+from .models import Bug, BugSource, Preset, BugCorrelation, AnalysisConfig
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
 
@@ -140,6 +141,8 @@ def bug_detail(request, external_id):
             }
             for corr in bug.correlations.all()
         ],
+        "analysis": bug.analysis,
+        "analysis_updated_at": bug.analysis_updated_at.isoformat() if bug.analysis_updated_at else None,
     })
 
 
@@ -332,3 +335,77 @@ def correlated_bugs(request, external_id):
                     ],
                 })
     return JsonResponse({"correlated_bugs": related})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def analyze_bug_view(request, external_id):
+    try:
+        bug = get_object_or_404(Bug, external_id=external_id)
+
+        if bug.analysis and request.GET.get("force") != "1":
+            return JsonResponse({
+                "status": "ok",
+                "summary": bug.analysis,
+                "cached": True,
+                "cached_at": bug.analysis_updated_at.isoformat() if bug.analysis_updated_at else None,
+            })
+
+        decision = None
+        if request.body:
+            try:
+                body = json.loads(request.body)
+                decision = body.get("decision")
+            except json.JSONDecodeError:
+                pass
+
+        result = analyze_bug(external_id, decision=decision)
+        return JsonResponse(result)
+    except Exception as e:
+        return JsonResponse({"status": "error", "error": str(e)}, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def analysis_config_view(request):
+    config = AnalysisConfig.objects.first()
+    if not config:
+        config = AnalysisConfig.objects.create()
+
+    if request.method == "GET":
+        masked = ""
+        if config.api_key:
+            masked = config.api_key[:4] + "…" + config.api_key[-4:]
+        return JsonResponse({
+            "system_prompt": config.system_prompt,
+            "api_key": masked,
+            "api_key_set": bool(config.api_key),
+            "auto_analyze_max_bytes": config.auto_analyze_max_bytes,
+            "max_tokens": config.max_tokens,
+        })
+
+    try:
+        body = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    if "system_prompt" in body:
+        config.system_prompt = body["system_prompt"]
+    if "api_key" in body:
+        config.api_key = body["api_key"]
+    if "auto_analyze_max_bytes" in body:
+        config.auto_analyze_max_bytes = int(body["auto_analyze_max_bytes"])
+    if "max_tokens" in body:
+        config.max_tokens = int(body["max_tokens"])
+    config.save()
+
+    masked = ""
+    if config.api_key:
+        masked = config.api_key[:4] + "…" + config.api_key[-4:]
+    return JsonResponse({
+        "system_prompt": config.system_prompt,
+        "api_key": masked,
+        "api_key_set": bool(config.api_key),
+        "auto_analyze_max_bytes": config.auto_analyze_max_bytes,
+        "max_tokens": config.max_tokens,
+    })
