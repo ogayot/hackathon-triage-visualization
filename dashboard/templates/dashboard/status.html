@@ -99,6 +99,7 @@
         .progress { height: 24px; border-radius: 12px; background: var(--btn-border); }
         .progress-bar { border-radius: 12px; font-size: 0.8rem; line-height: 24px; }
         .output-box { background: #1a1a1a; color: #f0f0f0; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.85rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .dark-mode .output-box { background: #111; color: #e0e0e0; border: 1px solid #333; }
         .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
         .toast-msg { 
             background: var(--card-bg); 
@@ -117,6 +118,13 @@
         .detail-grid dt { opacity: 0.7; }
         .detail-grid dd { margin: 0; }
         .step-badge { display: inline-block; background: #0d6efd; color: white; border-radius: 12px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; }
+        .dark-mode .text-muted { color: #aaa !important; }
+        .dark-mode .text-success { color: #4caf50 !important; }
+        .dark-mode .text-danger { color: #ef5350 !important; }
+        .dark-mode .text-warning { color: #ffb74d !important; }
+        .dark-mode .bg-success { background-color: #2e7d32 !important; }
+        .dark-mode .bg-secondary { background-color: #555 !important; }
+        .dark-mode .progress-bar.bg-warning { background-color: #f57c00 !important; }
         .preset-delete { color: #dc3545; cursor: pointer; font-size: 0.8rem; margin-left: 8px; opacity: 0; transition: opacity 0.15s; }
         .preset-btn:hover .preset-delete { opacity: 1; }
         .preset-btn .preset-edit { color: #0d6efd; cursor: pointer; font-size: 0.8rem; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
