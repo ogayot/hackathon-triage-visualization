@@ -6,6 +6,7 @@ import os
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
+from dashboard.management.progress import write_progress, check_cancelled
 from dashboard.models import Bug, BugSource, GitHubPR, Preset
 
 logger = logging.getLogger(__name__)
@@ -278,18 +279,39 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f"Scanning {len(repos)} repos: {', '.join(repos)}")
+        write_progress(current=0, total=len(repos), phase="correlate_prs", item="", message="Starting...")
 
         total_prs = 0
         total_linked = 0
 
-        for repo in repos:
+        for repo_idx, repo in enumerate(repos, 1):
+            if check_cancelled():
+                self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                return
             self.stdout.write(f"\n--- {repo} ---")
+            self.stdout.write(f"  Setting up repo...")
+            write_progress(
+                current=repo_idx, total=len(repos),
+                phase="correlate_prs", item=repo,
+                message=f"[{repo_idx}/{len(repos)}] Setting up {repo}"
+            )
             try:
                 repo_dir = ensure_repo_clone(repo)
             except RuntimeError as e:
                 self.stdout.write(self.style.ERROR(f"  Clone failed: {e}"))
+                write_progress(
+                    current=repo_idx, total=len(repos),
+                    phase="correlate_prs", item=repo,
+                    message=f"[{repo_idx}/{len(repos)}] Clone failed: {e}"
+                )
                 continue
 
+            self.stdout.write(f"  Scanning git history...")
+            write_progress(
+                current=repo_idx, total=len(repos),
+                phase="correlate_prs", item=repo,
+                message=f"[{repo_idx}/{len(repos)}] Scanning git history..."
+            )
             try:
                 branch = get_default_branch(repo_dir)
                 merge_results = scan_merge_repo(repo_dir, branch, 500)
@@ -299,8 +321,16 @@ class Command(BaseCommand):
                 open_results = scan_open_prs(repo_dir, merged_nums, branch)
             except RuntimeError as e:
                 self.stdout.write(self.style.ERROR(f"  Scan failed: {e}"))
+                write_progress(
+                    current=repo_idx, total=len(repos),
+                    phase="correlate_prs", item=repo,
+                    message=f"[{repo_idx}/{len(repos)}] Scan failed: {e}"
+                )
                 continue
 
+            if check_cancelled():
+                self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                return
             all_results = merge_results + squash_results + open_results
 
             pr_map = {}
@@ -320,8 +350,17 @@ class Command(BaseCommand):
                 f"{len(all_results) - merged_count} open)"
             )
 
+            write_progress(
+                current=repo_idx, total=len(repos),
+                phase="correlate_prs", item=repo,
+                message=f"[{repo_idx}/{len(repos)}] Linking {len(pr_map)} PRs to bugs..."
+            )
+
             linked = 0
             for pr_num, info in sorted(pr_map.items()):
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
                 is_merged = pr_num in merged_nums
                 GitHubPR.objects.update_or_create(
                     repo=repo,
@@ -346,6 +385,12 @@ class Command(BaseCommand):
 
             total_prs += len(pr_map)
             total_linked += linked
+
+            write_progress(
+                current=repo_idx, total=len(repos),
+                phase="correlate_prs", item=repo,
+                message=f"[{repo_idx}/{len(repos)}] Done: {len(pr_map)} PRs, {linked} linked"
+            )
 
         self.stdout.write(self.style.SUCCESS(
             f"\nDone. {total_prs} PRs reference LP bugs across {len(repos)} repos, "

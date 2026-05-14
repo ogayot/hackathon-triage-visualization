@@ -10,6 +10,7 @@ from django.shortcuts import render, get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
+from .management.progress import read_progress, request_cancel, clear_cancel, check_cancelled
 from .models import Bug, BugSource, Preset, BugCorrelation
 
 STATUS_FILE = "/tmp/dashboard_ops.json"
@@ -32,6 +33,7 @@ def write_status(data):
 
 def run_command_thread(command, args=None):
     def target():
+        clear_cancel()
         buf = StringIO()
         try:
             kwargs = {"stdout": buf, "stderr": buf}
@@ -42,14 +44,18 @@ def run_command_thread(command, args=None):
             status = read_status()
             status["running"] = False
             status["output"] = output
-            status["error"] = None
+            if status.get("error") != "Cancelled":
+                status["error"] = None
             write_status(status)
         except Exception as e:
             status = read_status()
             status["running"] = False
             status["output"] = buf.getvalue()
-            status["error"] = str(e)
+            if not status.get("cancelled"):
+                status["error"] = str(e)
             write_status(status)
+        finally:
+            clear_cancel()
 
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
@@ -166,9 +172,25 @@ def run_operation(request, operation_name):
     return JsonResponse({"status": "started", "operation": operation_name})
 
 
+@csrf_exempt
+def cancel_operation(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "POST required"}, status=405)
+    status = read_status()
+    if not status.get("running"):
+        return JsonResponse({"error": "No operation running"}, status=409)
+    request_cancel()
+    return JsonResponse({"status": "cancel_requested"})
+
+
 def operation_status(request):
     status = read_status()
-    return JsonResponse(status)
+    progress = read_progress()
+    return JsonResponse({"status": status, "progress": progress})
+
+
+def status_page(request):
+    return render(request, "dashboard/status.html")
 
 
 @csrf_exempt

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from django.core.management.base import BaseCommand
 from django.utils.timezone import make_aware
 
+from dashboard.management.progress import write_progress, check_cancelled
 from dashboard.models import Bug, BugSource, Preset
 
 logger = logging.getLogger(__name__)
@@ -217,39 +218,68 @@ class Command(BaseCommand):
         total_created = 0
         total_updated = 0
 
-        for preset in presets_to_fetch:
-            self.stdout.write(f"Fetching for preset: {preset.name}")
-            for source in preset.sources.all():
-                fetcher = FETCHERS.get(source.source_type)
-                if not fetcher:
-                    self.stdout.write(f"  No fetcher for {source.source_type}: {source.identifier}")
-                    continue
+        source_steps = [(p, s) for p in presets_to_fetch for s in p.sources.all()]
+        total_steps = len(source_steps)
+        step_idx = 0
 
-                self.stdout.write(f"  Fetching {source.source_type}: {source.identifier}...")
-                bugs = fetcher(source)
+        for preset, source in source_steps:
+            step_idx += 1
+            if check_cancelled():
+                self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                return
+            fetcher = FETCHERS.get(source.source_type)
+            if not fetcher:
+                self.stdout.write(f"  No fetcher for {source.source_type}: {source.identifier}")
+                write_progress(
+                    current=step_idx, total=total_steps,
+                    phase="fetch_bugs",
+                    item=source.identifier,
+                    message=f"Skipping {source.source_type}: {source.identifier} (no fetcher)"
+                )
+                continue
 
-                created = 0
-                updated = 0
-                for bug_data in bugs:
-                    bug, was_created = Bug.objects.update_or_create(
-                        external_id=bug_data["external_id"],
-                        defaults={
-                            "title": bug_data["title"],
-                            "description": bug_data["description"],
-                            "status": bug_data["status"],
-                            "priority": bug_data["priority"],
-                            "url": bug_data["url"],
-                            "last_updated": bug_data["last_updated"],
-                        },
+            self.stdout.write(f"[{step_idx}/{total_steps}] Fetching {source.source_type}: {source.identifier}...")
+            write_progress(
+                current=step_idx, total=total_steps,
+                phase="fetch_bugs",
+                item=source.identifier,
+                message=f"Fetching {source.source_type}: {source.identifier}"
+            )
+            bugs = fetcher(source)
+
+            created = 0
+            updated = 0
+            for i, bug_data in enumerate(bugs):
+                if check_cancelled():
+                    self.stdout.write(self.style.WARNING("Operation cancelled by user"))
+                    return
+                bug, was_created = Bug.objects.update_or_create(
+                    external_id=bug_data["external_id"],
+                    defaults={
+                        "title": bug_data["title"],
+                        "description": bug_data["description"],
+                        "status": bug_data["status"],
+                        "priority": bug_data["priority"],
+                        "url": bug_data["url"],
+                        "last_updated": bug_data["last_updated"],
+                    },
+                )
+                bug.sources.add(source)
+                if was_created:
+                    created += 1
+                else:
+                    updated += 1
+
+                if (i + 1) % 10 == 0 or i == len(bugs) - 1:
+                    write_progress(
+                        current=step_idx, total=total_steps,
+                        phase="fetch_bugs",
+                        item=source.identifier,
+                        message=f"Saving bugs from {source.source_type}: {source.identifier} ({i+1}/{len(bugs)})"
                     )
-                    bug.sources.add(source)
-                    if was_created:
-                        created += 1
-                    else:
-                        updated += 1
 
-                total_created += created
-                total_updated += updated
-                self.stdout.write(f"    → {created} created, {updated} updated")
+            total_created += created
+            total_updated += updated
+            self.stdout.write(f"    → {created} created, {updated} updated")
 
         self.stdout.write(self.style.SUCCESS(f"Done. {total_created} created, {total_updated} updated total"))
