@@ -19,9 +19,14 @@ def to_aware(dt):
 
 
 def fetch_launchpad_bugs(source):
+    import os
     from launchpadlib.launchpad import Launchpad
 
-    launchpad = Launchpad.login_anonymously("bug-dashboard", "production", version="devel")
+    creds_dir = os.path.expanduser("~/.launchpadlib/bug-dashboard")
+    if os.path.exists(creds_dir):
+        launchpad = Launchpad.login_with("bug-dashboard", "production", version="devel")
+    else:
+        launchpad = Launchpad.login_anonymously("bug-dashboard", "production", version="devel")
 
     bugs = []
     try:
