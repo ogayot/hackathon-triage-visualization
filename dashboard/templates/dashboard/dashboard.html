@@ -138,8 +138,26 @@
             display: inline-flex; 
             align-items: center; 
             gap: 0.25rem; 
-            margin-right: 1rem; 
-            font-size: 0.9rem; 
+            margin-right: 0.75rem; 
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 0.15rem 0.4rem;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            transition: all 0.15s;
+        }
+        .status-count:hover { 
+            background: var(--btn-hover-bg);
+            border-color: var(--btn-border);
+        }
+        .status-count.active { 
+            background: var(--btn-active-bg);
+            border-color: #0d6efd;
+            font-weight: 600;
+        }
+        .status-count.excluded { 
+            opacity: 0.4;
+            text-decoration: line-through;
         }
         .search-box { 
             border-radius: 8px; 
@@ -266,15 +284,17 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="mt-2">
+                        <div class="mt-2" id="statusFilters">
+                            <span class="status-count" data-status="__all__" onclick="toggleStatusFilter('__all__')">All</span>
                             {% for status, count in status_counts.items %}
-                            <span class="status-count">
+                            <span class="status-count" data-status="{{ status }}" onclick="toggleStatusFilter(this.dataset.status)">
                                 <span class="status-dot {{ status|cut:" "|cut:"'" }}"></span>
                                 {{ status }} ({{ count }})
                             </span>
-                            {% empty %}
-                            <span class="text-muted">No bugs imported yet</span>
                             {% endfor %}
+                            <span class="status-count" data-status="__not_released__" onclick="toggleStatusFilter('__not_released__')" title="Hide Fix Released bugs">
+                                🚫 Fix Released
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -459,10 +479,53 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') { closeBugDetail(); closePresetModal(); }
 });
 
+let statusFilters = new Set();
+let excludeReleased = false;
+
+function toggleStatusFilter(status) {
+    if (status === '__all__') {
+        statusFilters.clear();
+        excludeReleased = false;
+    } else if (status === '__not_released__') {
+        excludeReleased = !excludeReleased;
+        statusFilters.clear();
+    } else {
+        if (statusFilters.has(status)) {
+            statusFilters.delete(status);
+        } else {
+            statusFilters.add(status);
+        }
+        excludeReleased = false;
+    }
+    updateFilterUI();
+    filterBugs();
+}
+
+function updateFilterUI() {
+    document.querySelectorAll('#statusFilters .status-count').forEach(el => {
+        const s = el.dataset.status;
+        el.classList.toggle('active', s === '__all__' && statusFilters.size === 0 && !excludeReleased);
+        el.classList.toggle('active', statusFilters.has(s));
+        el.classList.toggle('active', s === '__not_released__' && excludeReleased);
+        el.classList.remove('excluded');
+    });
+}
+
 function filterBugs() {
     const query = document.getElementById('searchInput').value.toLowerCase();
     document.querySelectorAll('.bug-row').forEach(row => {
-        row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        const status = row.cells[3].textContent.trim();
+        let match = true;
+        if (statusFilters.size > 0) {
+            match = statusFilters.has(status);
+        }
+        if (excludeReleased) {
+            match = status !== 'Fix Released';
+        }
+        if (query) {
+            match = match && row.textContent.toLowerCase().includes(query);
+        }
+        row.style.display = match ? '' : 'none';
     });
 }
 
