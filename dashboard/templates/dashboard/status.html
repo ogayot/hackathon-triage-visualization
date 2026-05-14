@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operation Status - Bug Aggregator Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f5f5f5;
+            --text-color: #333;
+            --sidebar-bg: white;
+            --sidebar-border: #dee2e6;
+            --card-bg: white;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            --btn-bg: white;
+            --btn-border: #dee2e6;
+            --btn-hover-bg: #f0f7ff;
+            --btn-active-bg: #e8f4ff;
+            --row-hover-bg: #f8f9fa;
+            --modal-bg: white;
+            --source-badge-bg: #f8f9fa;
+            --source-badge-color: #333;
+            --preset-btn-color: #333;
+        }
+
+        .dark-mode {
+            --bg-color: #1a1a1a;
+            --text-color: #f0f0f0;
+            --sidebar-bg: #2d2d2d;
+            --sidebar-border: #444;
+            --card-bg: #2d2d2d;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --btn-bg: #3d3d3d;
+            --btn-border: #444;
+            --btn-hover-bg: #444;
+            --btn-active-bg: #555;
+            --row-hover-bg: #333;
+            --modal-bg: #3d3d3d;
+            --source-badge-bg: #444;
+            --source-badge-color: #f0f0f0;
+            --preset-btn-color: #f0f0f0;
+        }
+
+        body { 
+            background: var(--bg-color); 
+            color: var(--text-color);
+            font-family: system-ui, -apple-system, sans-serif; 
+        }
+        .sidebar { 
+            background: var(--sidebar-bg); 
+            border-right: 1px solid var(--sidebar-border); 
+            min-height: 100vh; 
+            padding: 1.5rem; 
+            border-top: 1px solid var(--sidebar-border);
+        }
+        .preset-btn { 
+            display: block; 
+            width: 100%; 
+            text-align: left; 
+            padding: 0.75rem 1rem; 
+            margin-bottom: 0.5rem; 
+            border: 1px solid var(--btn-border); 
+            border-radius: 8px; 
+            background: var(--btn-bg); 
+            cursor: pointer; 
+            transition: all 0.15s; 
+            text-decoration: none; 
+            color: var(--preset-btn-color); 
+            font-weight: normal; 
+        }
+        .preset-btn:hover { 
+            border-color: #0d6efd; 
+            background: var(--btn-hover-bg); 
+        }
+        .preset-btn.active { 
+            border-color: #0d6efd; 
+            background: var(--btn-active-bg); 
+            font-weight: 600; 
+        }
+        .summary-card { 
+            background: var(--card-bg); 
+            border-radius: 12px; 
+            padding: 1.25rem; 
+            box-shadow: var(--card-shadow); 
+            border: 1px solid var(--btn-border);
+        }
+        .source-key { 
+            font-size: 0.85rem; 
+            color: var(--text-color); 
+        }
+        .source-key div { 
+            margin-bottom: 0.25rem; 
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #dee2e6; border-top-color: #0d6efd; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 6px; vertical-align: middle; }
+        .op-btn { position: relative; }
+        .op-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .progress { height: 24px; border-radius: 12px; background: var(--btn-border); }
+        .progress-bar { border-radius: 12px; font-size: 0.8rem; line-height: 24px; }
+        .output-box { background: #1a1a1a; color: #f0f0f0; border-radius: 8px; padding: 1rem; font-family: monospace; font-size: 0.85rem; max-height: 300px; overflow-y: auto; white-space: pre-wrap; }
+        .toast-container { position: fixed; top: 20px; right: 20px; z-index: 9999; }
+        .toast-msg { 
+            background: var(--card-bg); 
+            border-radius: 8px; 
+            padding: 12px 20px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); 
+            margin-bottom: 8px; 
+            display: flex; 
+            align-items: center; 
+            gap: 8px; 
+            animation: slideIn 0.3s ease; 
+            border-left: 4px solid var(--btn-border);
+        }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .detail-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 0.9rem; }
+        .detail-grid dt { opacity: 0.7; }
+        .detail-grid dd { margin: 0; }
+        .step-badge { display: inline-block; background: #0d6efd; color: white; border-radius: 12px; padding: 2px 10px; font-size: 0.8rem; font-weight: 600; }
+        .preset-delete { color: #dc3545; cursor: pointer; font-size: 0.8rem; margin-left: 8px; opacity: 0; transition: opacity 0.15s; }
+        .preset-btn:hover .preset-delete { opacity: 1; }
+        .preset-btn .preset-edit { color: #0d6efd; cursor: pointer; font-size: 0.8rem; margin-left: 4px; opacity: 0; transition: opacity 0.15s; }
+        .preset-btn:hover .preset-edit { opacity: 1; }
+        .source-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+        .source-row select, .source-row input { flex: 1; }
+        .source-row .btn-remove { flex: 0; }
+    </style>
+</head>
+<body>
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-2 sidebar">
+            <h5 class="mb-3">🐞 Bug Dashboard</h5>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="text-muted mb-0">Presets</h6>
+                <button class="btn btn-sm btn-outline-primary" onclick="openPresetModal()" title="Add Preset">+</button>
+            </div>
+            <div id="presetList"></div>
+            <hr>
+            <h6 class="text-muted">Operations</h6>
+            <button class="btn btn-outline-primary btn-sm w-100 mb-2 op-btn" id="fetchBtnStatus" onclick="startOperation('fetch_bugs')">
+                📥 Fetch Bugs
+            </button>
+            <button class="btn btn-outline-success btn-sm w-100 mb-2 op-btn" id="correlateBtnStatus" onclick="startOperation('correlate_prs')">
+                🔗 Correlate PRs
+            </button>
+            <a href="/" class="btn btn-outline-secondary btn-sm w-100 mb-2">← Dashboard</a>
+            <button class="btn btn-outline-danger btn-sm w-100 mb-2 op-btn" id="cancelBtnStatus" onclick="cancelOperation()" style="display:none">
+                ⏹ Cancel Operation
+            </button>
+            <hr>
+            <div class="source-key">
+                <h6 class="text-muted">Source Key</h6>
+                <div>📦 Launchpad</div>
+                <div>🐙 GitHub</div>
+                <div>🐧 Bugzilla</div>
+            </div>
+        </div>
+        <div class="col-10 p-4">
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="summary-card">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                Operation Status
+                                <span id="statusDot" class="ms-2"></span>
+                            </h5>
+                            <div>
+                                <span id="elapsedDisplay" class="badge bg-secondary me-2" style="font-size:0.9rem;display:none">--</span>
+                                <button id="darkModeToggle" class="btn btn-outline-secondary btn-sm" onclick="toggleDarkMode()">
+                                    <span id="toggleIcon">🌙</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-7">
+                    <div class="summary-card h-100">
+                        <h6 class="text-muted mb-2">Current Operation</h6>
+                        <div id="operationStatus">
+                            <span class="spinner"></span> Loading...
+                        </div>
+                    </div>
+                </div>
+                <div class="col-5">
+                    <div class="summary-card h-100">
+                        <h6 class="text-muted mb-2">Details</h6>
+                        <div id="detailStatus">
+                            <span class="spinner"></span> Loading...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="summary-card">
+                        <h6 class="text-muted mb-2">Progress</h6>
+                        <div id="progressBar">
+                            <span class="spinner"></span> Loading...
+                        </div>
+                        <div id="progressMessage" class="mt-2 text-muted small"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="summary-card">
+                        <h6 class="text-muted mb-2">Output Log</h6>
+                        <div id="outputLog" class="output-box">
+                            <span class="text-muted">Waiting for output...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-12">
+                    <a href="/" class="btn btn-primary">← Back to Dashboard</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="presetModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1040;align-items:center;justify-content:center;">
+    <div style="background:var(--modal-bg);border-radius:12px;max-width:600px;width:90%;max-height:90vh;overflow-y:auto;padding:2rem;position:relative;z-index:1050;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0" id="presetModalTitle">New Preset</h5>
+            <button type="button" class="btn-close" onclick="closePresetModal()"></button>
+        </div>
+        <form id="presetForm" onsubmit="savePreset(event)">
+            <div class="mb-3">
+                <label class="form-label">Preset Name</label>
+                <input type="text" class="form-control" id="presetName" required placeholder="e.g. MyProject">
+            </div>
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label mb-0">Sources</label>
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="addSourceRow()">+ Add Source</button>
+                </div>
+                <div id="sourcesContainer"></div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary" id="presetSaveBtn">Save Preset</button>
+                <button type="button" class="btn btn-secondary" onclick="closePresetModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let startedAt = null;
+let elapsedInterval = null;
+let editingPresetId = null;
+let sourceRowCounter = 0;
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDuration(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function formatDurationMs(ms) {
+    return formatDuration(ms / 1000);
+}
+
+function updateElapsed() {
+    if (startedAt) {
+        const elapsed = Date.now() - startedAt;
+        document.getElementById('elapsedDisplay').textContent = '⏱ ' + formatDurationMs(elapsed);
+    }
+}
+
+function updateStatus() {
+    fetch('/api/status/')
+        .then(r => r.json())
+        .then(data => {
+            const status = data.status;
+            const progress = data.progress;
+            const opDiv = document.getElementById('operationStatus');
+            const detDiv = document.getElementById('detailStatus');
+            const progDiv = document.getElementById('progressBar');
+            const progMsg = document.getElementById('progressMessage');
+            const logDiv = document.getElementById('outputLog');
+            const statusDot = document.getElementById('statusDot');
+            const cancelBtn = document.getElementById('cancelBtnStatus');
+            const elapsedDisplay = document.getElementById('elapsedDisplay');
+
+            if (status.running) {
+                cancelBtn.style.display = '';
+                startedAt = status.started_at * 1000;
+                if (!elapsedInterval) {
+                    elapsedInterval = setInterval(updateElapsed, 1000);
+                }
+                updateElapsed();
+                elapsedDisplay.style.display = '';
+
+                const opName = status.operation === 'fetch_bugs' ? 'Fetch Bugs' : 'Correlate PRs';
+                opDiv.innerHTML = `
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="spinner"></span>
+                        <strong class="ms-2" style="font-size:1.1rem">${escapeHtml(opName)}</strong>
+                    </div>
+                    <div class="detail-grid mt-2">
+                        <dt>Started</dt>
+                        <dd>${new Date(startedAt).toLocaleString()}</dd>
+                        <dt>Elapsed</dt>
+                        <dd><span id="elapsedValue">${formatDurationMs(Date.now() - startedAt)}</span></dd>
+                    </div>
+                `;
+
+                const current = progress.current || 0;
+                const total = progress.total || 0;
+                const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+                progDiv.innerHTML = `
+                    <div class="progress">
+                        <div class="progress-bar bg-success progress-bar-striped progress-bar-animated" style="width: ${pct}%">${pct}%</div>
+                    </div>
+                `;
+                progMsg.innerHTML = `<strong>Step ${current} of ${total}</strong> &mdash; ${escapeHtml(progress.message || '')}`;
+
+                detDiv.innerHTML = `
+                    <div class="detail-grid">
+                        <dt>Phase</dt>
+                        <dd><span class="step-badge">${escapeHtml(progress.phase || status.operation || '--')}</span></dd>
+                        <dt>Item</dt>
+                        <dd>${escapeHtml(progress.item || '--')}</dd>
+                        <dt>Last Update</dt>
+                        <dd>${progress.last_update ? new Date(progress.last_update).toLocaleTimeString() : '--'}</dd>
+                    </div>
+                `;
+                statusDot.innerHTML = '<span class="spinner"></span>';
+            } else {
+                cancelBtn.style.display = 'none';
+                startedAt = null;
+                if (elapsedInterval) {
+                    clearInterval(elapsedInterval);
+                    elapsedInterval = null;
+                }
+                elapsedDisplay.style.display = 'none';
+
+                const hasResult = status.output || status.error;
+                opDiv.innerHTML = `
+                    <div class="text-success mb-2" style="font-size:1.1rem">✅ Idle</div>
+                    ${status.error ? '<div class="text-danger mt-2"><strong>Last error:</strong> ' + escapeHtml(status.error) + '</div>' : ''}
+                    ${!hasResult ? '<div class="text-muted small mt-2">No operation has been run yet.</div>' : ''}
+                `;
+                progDiv.innerHTML = `
+                    <div class="progress">
+                        <div class="progress-bar bg-secondary" style="width: 0%">0%</div>
+                    </div>
+                `;
+                progMsg.innerHTML = '<span class="text-muted">No active progress</span>';
+
+                detDiv.innerHTML = '<div class="text-muted">—</div>';
+                statusDot.innerHTML = '';
+            }
+
+            if (status.output) {
+                logDiv.textContent = status.output;
+                logDiv.scrollTop = logDiv.scrollHeight;
+            }
+        })
+        .catch(() => {
+            document.getElementById('operationStatus').innerHTML = '<span class="text-danger">Failed to load status</span>';
+            document.getElementById('detailStatus').innerHTML = '<span class="text-danger">Failed to load details</span>';
+            document.getElementById('progressBar').innerHTML = '<span class="text-danger">Failed to load progress</span>';
+        });
+}
+
+updateStatus();
+setInterval(updateStatus, 2000);
+
+function cancelOperation() {
+    const btn = document.getElementById('cancelBtnStatus');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Cancelling...';
+    fetch('/api/cancel/', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                btn.disabled = false;
+                btn.innerHTML = '⏹ Cancel Operation';
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '⏹ Cancel Operation';
+        });
+}
+
+function toggleDarkMode() {
+    const body = document.body;
+    const toggleIcon = document.getElementById('toggleIcon');
+    body.classList.toggle('dark-mode');
+    toggleIcon.textContent = body.classList.contains('dark-mode') ? '☀️' : '🌙';
+    localStorage.setItem('darkMode', body.classList.contains('dark-mode') ? 'enabled' : 'disabled');
+}
+
+function initDarkMode() {
+    const saved = localStorage.getItem('darkMode');
+    const prefers = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (saved === 'enabled' || (!saved && prefers)) {
+        document.body.classList.add('dark-mode');
+        document.getElementById('toggleIcon').textContent = '☀️';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initDarkMode();
+    loadPresets();
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { closePresetModal(); }
+    });
+});
+
+function loadPresets() {
+    fetch('/api/presets/')
+        .then(r => r.json())
+        .then(presets => {
+            const list = document.getElementById('presetList');
+            list.innerHTML = presets.map(p => `
+                <div style="position:relative;display:flex;align-items:center;">
+                    <a href="/?preset=${encodeURIComponent(p.name)}" class="preset-btn" style="flex:1;">
+                        ${escapeHtml(p.name)}
+                    </a>
+                    <span class="preset-edit" onclick="event.preventDefault();event.stopPropagation();openPresetModal('${escapeHtml(p.name)}')">✏️</span>
+                    <span class="preset-delete" onclick="event.preventDefault();event.stopPropagation();deletePreset('${escapeHtml(p.name)}')">🗑️</span>
+                </div>
+            `).join('');
+        });
+}
+
+function openPresetModal(presetName) {
+    editingPresetId = null;
+    document.getElementById('presetModalTitle').textContent = 'New Preset';
+    document.getElementById('presetName').value = '';
+    document.getElementById('presetSaveBtn').textContent = 'Save Preset';
+    document.getElementById('sourcesContainer').innerHTML = '';
+    addSourceRow();
+
+    if (presetName) {
+        fetch('/api/presets/')
+            .then(r => r.json())
+            .then(presets => {
+                const p = presets.find(pr => pr.name === presetName);
+                if (!p) return;
+                editingPresetId = p.id;
+                document.getElementById('presetModalTitle').textContent = 'Edit Preset';
+                document.getElementById('presetName').value = p.name;
+                document.getElementById('presetSaveBtn').textContent = 'Update Preset';
+                document.getElementById('sourcesContainer').innerHTML = '';
+
+                fetch('/api/presets/' + p.id + '/')
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.sources && data.sources.length > 0) {
+                            data.sources.forEach(s => addSourceRow(s.source_type, s.identifier));
+                        } else {
+                            addSourceRow();
+                        }
+                    });
+            });
+    }
+
+    document.getElementById('presetModal').style.display = 'flex';
+}
+
+function closePresetModal() {
+    document.getElementById('presetModal').style.display = 'none';
+}
+
+function addSourceRow(sourceType, identifier) {
+    const container = document.getElementById('sourcesContainer');
+    const row = document.createElement('div');
+    row.className = 'source-row';
+    row.id = 'sourceRow_' + (sourceRowCounter++);
+
+    const iconMap = { '📦': 'launchpad', '🐙': 'github', '🐧': 'bugzilla' };
+    let typeOptions = '';
+    for (const [icon, val] of Object.entries(iconMap)) {
+        typeOptions += `<option value="${val}" ${(sourceType || 'launchpad') === val ? 'selected' : ''}>${icon} ${val.charAt(0).toUpperCase() + val.slice(1)}</option>`;
+    }
+
+    row.innerHTML = `
+        <select class="form-select form-select-sm" style="max-width:140px;">
+            ${typeOptions}
+        </select>
+        <input type="text" class="form-control form-control-sm" placeholder="e.g. canonical/my-project" value="${identifier || ''}">
+        <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('.source-row').remove()">✕</button>
+    `;
+    container.appendChild(row);
+}
+
+function savePreset(event) {
+    event.preventDefault();
+    const name = document.getElementById('presetName').value.trim();
+    if (!name) { showToast('⚠️ Preset name is required', 'error'); return; }
+
+    const rows = document.querySelectorAll('#sourcesContainer .source-row');
+    const sources = [];
+    rows.forEach(row => {
+        const select = row.querySelector('select');
+        const input = row.querySelector('input');
+        const sourceType = select.value;
+        const identifier = input.value.trim();
+        if (identifier) {
+            sources.push({ source_type: sourceType, identifier: identifier });
+        }
+    });
+
+    if (sources.length === 0) { showToast('⚠️ At least one source is required', 'error'); return; }
+
+    const url = editingPresetId ? '/api/presets/' + editingPresetId + '/' : '/api/presets/';
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, sources: sources }),
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showToast('⚠️ ' + data.error, 'error');
+            } else {
+                showToast('✅ Preset "' + name + '" saved!', 'success');
+                closePresetModal();
+                loadPresets();
+            }
+        })
+        .catch(() => showToast('⚠️ Failed to save preset', 'error'));
+}
+
+function deletePreset(presetName) {
+    if (!confirm('Delete preset "' + presetName + '"?')) return;
+
+    fetch('/api/presets/')
+        .then(r => r.json())
+        .then(presets => {
+            const p = presets.find(pr => pr.name === presetName);
+            if (!p) return;
+            fetch('/api/presets/' + p.id + '/', { method: 'DELETE' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        showToast('⚠️ ' + data.error, 'error');
+                    } else {
+                        showToast('✅ Preset "' + presetName + '" deleted', 'success');
+                        loadPresets();
+                    }
+                });
+        });
+}
+
+function showToast(msg, type) {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = 'toast-msg';
+    if (type === 'error') toast.style.borderLeft = '4px solid #dc3545';
+    else if (type === 'success') toast.style.borderLeft = '4px solid #198754';
+    else toast.style.borderLeft = '4px solid #0d6efd';
+    toast.innerHTML = msg;
+    container.appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100%)'; toast.style.transition = 'all 0.3s'; setTimeout(() => toast.remove(), 300); }, 8000);
+}
+
+function startOperation(name) {
+    const btn = document.getElementById(name === 'fetch_bugs' ? 'fetchBtnStatus' : 'correlateBtnStatus');
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Running...';
+
+    fetch('/api/run/' + name + '/', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                btn.innerHTML = origText;
+                btn.disabled = false;
+                showToast('⚠️ ' + data.error, 'error');
+                if (data.error.includes('already running')) pollStatus(name);
+                return;
+            }
+            showToast('▶️ ' + name + ' started', 'info');
+            pollStatus(name);
+        })
+        .catch(() => {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+            showToast('⚠️ Failed to start ' + name, 'error');
+        });
+}
+
+function pollStatus(name) {
+    const btn = document.getElementById(name === 'fetch_bugs' ? 'fetchBtnStatus' : 'correlateBtnStatus');
+    const cancelBtn = document.getElementById('cancelBtnStatus');
+
+    function check() {
+        fetch('/api/status/')
+            .then(r => r.json())
+            .then(data => {
+                if (data.status.running) {
+                    cancelBtn.style.display = '';
+                    setTimeout(check, 2000);
+                } else {
+                    cancelBtn.style.display = 'none';
+                    btn.innerHTML = '✅ ' + (name === 'fetch_bugs' ? 'Fetch Bugs' : 'Correlate PRs');
+                    btn.disabled = false;
+                    if (data.status.error === 'Cancelled') {
+                        showToast('⏹ Operation cancelled', 'info');
+                    } else if (data.status.error) {
+                        showToast('❌ ' + name + ' failed: ' + data.status.error, 'error');
+                    } else {
+                        showToast('✅ ' + name + ' completed!', 'success');
+                    }
+                }
+            })
+            .catch(() => {
+                setTimeout(check, 2000);
+            });
+    }
+    setTimeout(check, 1000);
+}
+</script>
+</body>
+</html>
